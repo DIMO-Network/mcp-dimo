@@ -33,17 +33,10 @@ const TelemetryQuerySchema = z.object({
 		variables: z.record(z.string(), z.string())
 });
 
-const VinOperationsSchema = z.discriminatedUnion("operation", [
-  z.object({
-    operation: z.literal("decode"),
+const VinDecodeSchema = z.object({
     vin: z.string(),
     countryCode: z.string().default("USA")
-  }),
-  z.object({
-    operation: z.literal("get"),
-    tokenId: z.number()
-  })
-]);
+  });
 
 const AttestationCreateSchema = z.object({
   tokenId: z.number(),
@@ -179,7 +172,6 @@ server.tool(
   "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Check the schema before using telemetry_introspect. Use this tool to fetch telemetry (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license. Provide a GraphQL query string, as as well required variables as an object.",
   TelemetryQuerySchema.shape,
   async (args: z.infer<typeof TelemetryQuerySchema>) => {
-    const env = process.env;
     try {
       const parsedQuery = parse(args.query!);
     } catch (error) {
@@ -256,21 +248,18 @@ server.tool(
   }
 );
 
-server.registerTool(
-  "vin_operations",
-  {
-    description: "Decode a VIN or fetch a vehicle's VIN from DIMO. Use this tool to decode a VIN string (get make/model/year/etc) or to retrieve the VIN for a registered vehicle by tokenId. For decoding, provide the VIN and (optionally) countryCode. For fetching, provide the tokenId.",
-    inputSchema: VinOperationsSchema as any,
-  },
-  (async (args: z.infer<typeof VinOperationsSchema>, _extra: any) => {
-    if (args.operation === "decode") {
+server.tool(  
+  "vin_decode",
+  "Decode a VIN using DIMO. Use this tool to decode a VIN string (get make/model/year/etc). For decoding, provide the VIN and (optionally) countryCode. For fetching, provide the tokenId.",
+  VinDecodeSchema.shape,
+  async (args: z.infer<typeof VinDecodeSchema>) => {
       if (!authState.developerJwt) {
         throw new Error("Not authenticated");
       }
       const decoded = await authState.dimo!.devicedefinitions.decodeVin({
         ...authState.developerJwt,
-        vin: (args as any).vin,
-        countryCode: (args as any).countryCode
+        vin: args.vin,
+        countryCode: args.countryCode
       });
       return {
         content: [{
@@ -278,20 +267,7 @@ server.registerTool(
           text: JSON.stringify(decoded, null, 2)
         }]
       };
-    } else {
-      const vinJwt = await ensureVehicleJwt((args as any).tokenId, [5]);
-      const vin = await authState.dimo!.telemetry.getVin({
-        ...vinJwt,
-        tokenId: (args as any).tokenId
-      });
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify(vin, null, 2)
-        }]
-      };
     }
-  }) as any
 );
 
 server.tool(
