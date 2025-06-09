@@ -399,7 +399,7 @@ async function main() {
   const env = process.env;
 
   // Initialize DIMO with environment if provided, otherwise use Production
-  authState.dimo = new DIMO(env.DIMO_ENVIRONMENT as "Production" | "Dev" || "Production");
+  authState.dimo = new DIMO("Production");
 
 
   // Auto-authenticate if credentials are provided

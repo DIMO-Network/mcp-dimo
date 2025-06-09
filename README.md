@@ -124,9 +124,6 @@ npm run build
 Create a `.env` file or set the following environment variables:
 
 ```bash
-# DIMO environment (optional, defaults to "Production")
-DIMO_ENVIRONMENT=Production  # or "Dev"
-
 # Auto-authentication credentials (optional but recommended)
 DIMO_CLIENT_ID=your_client_id
 DIMO_DOMAIN=your_domain.com
