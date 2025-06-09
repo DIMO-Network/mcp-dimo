@@ -217,14 +217,11 @@ server.tool(
       };
     }
     try {
-      console.error("Executing telemetry query:", args.query, args.variables, args.tokenId);
       const telemetryJwt = await ensureVehicleJwt(args.tokenId, [1,2,3,4,5]);
       const headers = {
         "Content-Type": "application/json",
-        ...(env.HEADERS ? JSON.parse(env.HEADERS) : {}),
-        ...(telemetryJwt?.accessToken ? { Authorization: `Bearer ${telemetryJwt.accessToken}` } : {}),
+        "Authorization" : `Bearer ${telemetryJwt.accessToken}`,
       };
-      console.error("Headers:", JSON.stringify(headers, null, 2));
       const response = await fetch(TELEMETRY_URL, {
         method: "POST",
         headers,
