@@ -20,13 +20,12 @@ interface AuthState {
 
 const IdentityQuerySchema = z.object({
   	query: z.string(),
-		variables: z.any().optional(),
+		variables: z.record(z.string(), z.string())
 });
 
 const TelemetryQuerySchema = z.object({
   	query: z.string(),
-		variables: z.any().optional(),
-    tokenId: z.number()
+		variables: z.record(z.string(), z.string()),
 });
 
 const VinOperationsSchema = z.discriminatedUnion("operation", [
@@ -82,10 +81,9 @@ async function ensureVehicleJwt(tokenId: number, privileges: number[] = [1]): Pr
   }
   
   // Get new JWT with required privileges
-  const vehicleJwt = await authState.dimo.tokenexchange.exchange({
+  const vehicleJwt = await authState.dimo.tokenexchange.getVehicleJwt({
     ...authState.developerJwt,
-    tokenId: tokenId,
-    privileges: privileges
+    tokenId: tokenId
   });
   
   authState.vehicleJwts.set(tokenId, { ...vehicleJwt, privileges });
@@ -130,7 +128,7 @@ async function ensureVehicleJwt(tokenId: number, privileges: number[] = [1]): Pr
 
 server.tool(
   "identity_query",
-  "Query the DIMO Identity GraphQL API or introspect its schema. Use this tool to fetch public identity data (such as user, device, or vehicle info) or to get the GraphQL schema. Provide a GraphQL query string and optional variables. No authentication required.",
+  "Query the DIMO Identity GraphQL API. Introspect the schema with identity_schema before. Use this tool to fetch public identity data (such as user, developer license, aftermarketdevice, manufacturer, sacds, or vehicle info). Provide a GraphQL query string and variables as an object. No authentication required.",
   IdentityQuerySchema.shape,
   async (args: z.infer<typeof IdentityQuerySchema>) => {
     const env = process.env;
@@ -199,7 +197,7 @@ server.tool(
 
 server.tool(
   "telemetry_query",
-  "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Use this tool to fetch telemetry (status, location, movement, VIN) for a specific vehicle. Requires a valid tokenId and JWT with appropriate privileges. Provide a GraphQL query string and optional variables.",
+  "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Check the schema before using telemetry_introspect. Use this tool to fetch telemetry (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license. Provide a GraphQL query string, as as well required variables as an object.",
   TelemetryQuerySchema.shape,
   async (args: z.infer<typeof TelemetryQuerySchema>) => {
     const env = process.env;
@@ -217,10 +215,21 @@ server.tool(
       };
     }
     try {
-      const telemetryJwt = await ensureVehicleJwt(args.tokenId, [1,2,3,4,5]);
+      const telemetryJwt = await ensureVehicleJwt(Number(args.variables.tokenId), [1,2,3,4,5]);
+      if (!telemetryJwt.headers || !telemetryJwt.headers.Authorization) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`,
+            },
+          ],
+        };
+      }
       const headers = {
         "Content-Type": "application/json",
-        "Authorization" : `Bearer ${telemetryJwt.accessToken}`,
+        "Authorization" : `${telemetryJwt.headers.Authorization}`,
       };
       const response = await fetch(TELEMETRY_URL, {
         method: "POST",
@@ -424,11 +433,6 @@ async function main() {
   
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(JSON.stringify({
-    level: "info",
-    event: "stdio_server_running",
-    message: "DIMO MCP Server running on stdio"
-  }));
 }
 
 // Handle errors
