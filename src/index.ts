@@ -11,11 +11,16 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 const IDENTITY_URL = "https://identity-api.dimo.zone/query";
 const TELEMETRY_URL = "https://telemetry-api.dimo.zone/query";
 
-// Store for managing authentication state
+interface VehicleJwtCacheEntry {
+  token: any;
+  privileges: number[];
+  expiresAt: number; // Unix timestamp in ms
+}
+
 interface AuthState {
   dimo?: DIMO;
   developerJwt?: any;
-  vehicleJwts: Map<number, any>;
+  vehicleJwts: Map<number, VehicleJwtCacheEntry>;
 }
 
 const IdentityQuerySchema = z.object({
@@ -25,7 +30,10 @@ const IdentityQuerySchema = z.object({
 
 const TelemetryQuerySchema = z.object({
   	query: z.string(),
-		variables: z.record(z.string(), z.string()),
+		variables: z.intersection(z.object({
+          tokenId: z.number(),
+      }), z.record(z.string(), z.any())),
+    tokenId: z.number()
 });
 
 const VinOperationsSchema = z.discriminatedUnion("operation", [
@@ -73,58 +81,32 @@ async function ensureVehicleJwt(tokenId: number, privileges: number[] = [1]): Pr
   if (!authState.developerJwt) {
     throw new Error("Not authenticated. Call dimo_authenticate first.");
   }
-  
-  // Check if we already have a JWT with the required privileges
-  const existingJwt = authState.vehicleJwts.get(tokenId);
-  if (existingJwt && privileges.every(p => existingJwt.privileges?.includes(p))) {
-    return existingJwt;
+
+  const cacheEntry = authState.vehicleJwts.get(tokenId);
+  const now = Date.now();
+
+  if (
+    cacheEntry &&
+    cacheEntry.expiresAt > now &&
+    privileges.every(p => cacheEntry.privileges.includes(p))
+  ) {
+    return cacheEntry.token;
   }
-  
+
   // Get new JWT with required privileges
   const vehicleJwt = await authState.dimo.tokenexchange.getVehicleJwt({
     ...authState.developerJwt,
     tokenId: tokenId
   });
-  
-  authState.vehicleJwts.set(tokenId, { ...vehicleJwt, privileges });
+
+  authState.vehicleJwts.set(tokenId, {
+    token: vehicleJwt,
+    privileges,
+    expiresAt: now + 5 * 60 * 1000 // 5 minutes from now
+  });
+
   return vehicleJwt;
 }
-
-
-
-// server.resource("identity-graphql-schema", new URL(IDENTITY_URL).href, async (uri) => {
-// 	try {
-// 		let schema = await introspectEndpoint(IDENTITY_URL, {});
-
-// 		return {
-// 			contents: [
-// 				{
-// 					uri: uri.href,
-// 					text: schema,
-// 				},
-// 			],
-// 		};
-// 	} catch (error) {
-// 		throw new Error(`Failed to get GraphQL schema: ${error}`);
-// 	}
-// });
-
-// server.resource("telemetry-graphql-schema", new URL(TELEMETRY_URL).href, async (uri) => {
-// 	try {
-// 		let schema = await introspectEndpoint(TELEMETRY_URL, {});
-
-// 		return {
-// 			contents: [
-// 				{
-// 					uri: uri.href,
-// 					text: schema,
-// 				},
-// 			],
-// 		};
-// 	} catch (error) {
-// 		throw new Error(`Failed to get GraphQL schema: ${error}`);
-// 	}
-// });
 
 server.tool(
   "identity_query",
