@@ -30,10 +30,7 @@ const IdentityQuerySchema = z.object({
 
 const TelemetryQuerySchema = z.object({
   	query: z.string(),
-		variables: z.intersection(z.object({
-          tokenId: z.number(),
-      }), z.record(z.string(), z.any())),
-    tokenId: z.number()
+		variables: z.record(z.string(), z.string())
 });
 
 const VinOperationsSchema = z.discriminatedUnion("operation", [
@@ -56,7 +53,7 @@ const AttestationCreateSchema = z.object({
 
 const SearchVehiclesSchema = z.object({
   query: z.string().optional(),
-  makeSlug: z.string().optional(),
+  make: z.string().optional(),
   year: z.number().optional(),
   model: z.string().optional()
 });
@@ -336,7 +333,7 @@ server.tool(
     }
     const searchParams: any = {};
     if (args.query) searchParams.query = args.query;
-    if (args.makeSlug) searchParams.makeSlug = args.makeSlug;
+    if (args.make) searchParams.makeSlug = args.make;
     if (args.year) searchParams.year = args.year;
     if (args.model) searchParams.model = args.model;
     const searchResults = await authState.dimo.devicedefinitions.search(searchParams);
