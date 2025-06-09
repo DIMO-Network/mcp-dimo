@@ -1,22 +1,11 @@
 #!/usr/bin/env node
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { 
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from "@modelcontextprotocol/sdk/types.js";
-import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { DIMO } from '@dimo-network/data-sdk';
 import { z } from 'zod';
-import { buildClientSchema, getIntrospectionQuery, printSchema } from "graphql";
 import { introspectEndpoint } from "./helpers/introspection";
 import { parse } from "graphql/language";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { jwt } from "zod/v4";
-import { ar } from "zod/v4/locales";
 
 // At the top, define the hardcoded URLs for identity and telemetry
 const IDENTITY_URL = "https://identity-api.dimo.zone/query";
@@ -74,11 +63,6 @@ const server = new McpServer(
   {
     name: "dimo-mcp-server",
     version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
   }
 );
 
