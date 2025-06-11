@@ -169,7 +169,7 @@ server.tool(
 
 server.tool(
   "telemetry_query",
-  "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Check the schema before using telemetry_introspect. Use this tool to fetch telemetry (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license. Provide a GraphQL query string, as as well required variables as an object. Always provide tokenId to make sure the authentication system picks it up.",
+  "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Check the schema before using telemetry_introspect. Use this tool to fetch telemetry (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license. Provide a GraphQL query string, as as well required variables as an object. Always provide tokenId in variables to query.",
   TelemetryQuerySchema.shape,
   async (args: z.infer<typeof TelemetryQuerySchema>) => {
     try {
