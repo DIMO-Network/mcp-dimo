@@ -505,6 +505,118 @@ server.tool(
   }
 );
 
+server.tool(
+  "start_charge",
+  "Start the vehicle charging.",
+  VehicleCommandSchema.shape,
+  async (args: z.infer<typeof VehicleCommandSchema>) => {
+    try {
+      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      if (!commandJwt.headers || !commandJwt.headers.Authorization) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed due to a missing Authorization header.`,
+            },
+          ],
+        };
+      }
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization" : `${commandJwt.headers.Authorization}`,
+      };
+      const response = await fetch(`${DEVICES_API_URL}/v1/vehicle/${args.tokenId}/commands/charge/start`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed: ${response.statusText}\n${responseText}`,
+            },
+          ],
+        };
+      }
+
+      const data = await response.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to execute command: ${error}`);
+    }
+  }
+);
+
+server.tool(
+  "stop_charge",
+  "Stop the vehicle charging.",
+  VehicleCommandSchema.shape,
+  async (args: z.infer<typeof VehicleCommandSchema>) => {
+    try {
+      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      if (!commandJwt.headers || !commandJwt.headers.Authorization) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed due to a missing Authorization header.`,
+            },
+          ],
+        };
+      }
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization" : `${commandJwt.headers.Authorization}`,
+      };
+      const response = await fetch(`${DEVICES_API_URL}/v1/vehicle/${args.tokenId}/commands/charge/stop`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed: ${response.statusText}\n${responseText}`,
+            },
+          ],
+        };
+      }
+
+      const data = await response.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to execute command: ${error}`);
+    }
+  }
+);
+
 // Main function to start the server
 async function main() {
   // Check for environment variables
