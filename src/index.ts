@@ -10,6 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 // At the top, define the hardcoded URLs for identity and telemetry
 const IDENTITY_URL = "https://identity-api.dimo.zone/query";
 const TELEMETRY_URL = "https://telemetry-api.dimo.zone/query";
+const DEVICES_API_URL = "https://devices-api.dimo.zone";
 
 interface VehicleJwtCacheEntry {
   token: any;
@@ -49,6 +50,15 @@ const SearchVehiclesSchema = z.object({
   make: z.string().optional(),
   year: z.number().optional(),
   model: z.string().optional()
+});
+
+const GetAuthenticationTokenSchema = z.object({
+  tokenId: z.number(),
+  privileges: z.array(z.number()).optional()
+});
+
+const VehicleCommandSchema = z.object({
+  tokenId: z.number(),
 });
 
 const authState: AuthState = {
@@ -351,6 +361,147 @@ server.tool(
         },
       ],
     };
+  }
+);
+
+server.tool(
+  "get_authentication_token",
+  "Get an authentication token for a specific vehicle. This token can be used to authenticate with the Telemetry API.",
+  GetAuthenticationTokenSchema.shape,
+  async (args: z.infer<typeof GetAuthenticationTokenSchema>) => {
+    try {
+      const token = await ensureVehicleJwt(args.tokenId, args.privileges);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(token, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: `Failed to get authentication token: ${error}`,
+          },
+        ],
+      };
+    }
+  }
+);
+
+server.tool(
+  "lock_doors",
+  "Lock the doors of a vehicle.",
+  VehicleCommandSchema.shape,
+  async (args: z.infer<typeof VehicleCommandSchema>) => {
+    try {
+      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      if (!commandJwt.headers || !commandJwt.headers.Authorization) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed due to a missing Authorization header.`,
+            },
+          ],
+        };
+      }
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization" : `${commandJwt.headers.Authorization}`,
+      };
+      const response = await fetch(`${DEVICES_API_URL}/v1/vehicle/${args.tokenId}/commands/doors/lock`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed: ${response.statusText}\n${responseText}`,
+            },
+          ],
+        };
+      }
+
+      const data = await response.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to execute command: ${error}`);
+    }
+  }
+);
+
+server.tool(
+  "unlock_doors",
+  "Unlock the doors of a vehicle.",
+  VehicleCommandSchema.shape,
+  async (args: z.infer<typeof VehicleCommandSchema>) => {
+    try {
+      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      if (!commandJwt.headers || !commandJwt.headers.Authorization) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed due to a missing Authorization header.`,
+            },
+          ],
+        };
+      }
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization" : `${commandJwt.headers.Authorization}`,
+      };
+      const response = await fetch(`${DEVICES_API_URL}/v1/vehicle/${args.tokenId}/commands/doors/unlock`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Request failed: ${response.statusText}\n${responseText}`,
+            },
+          ],
+        };
+      }
+
+      const data = await response.json();
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      throw new Error(`Failed to execute command: ${error}`);
+    }
   }
 );
 
