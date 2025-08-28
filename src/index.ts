@@ -74,7 +74,7 @@ const server = new McpServer(
 );
 
 // Helper function to ensure vehicle JWT exists
-async function ensureVehicleJwt(tokenId: number, privileges: number[] = [1]): Promise<any> {
+async function ensureVehicleJwt(tokenId: number): Promise<any> {
   if (!authState.dimo) {
     throw new Error("DIMO not initialized. Call dimo_init first.");
   }
@@ -82,27 +82,10 @@ async function ensureVehicleJwt(tokenId: number, privileges: number[] = [1]): Pr
     throw new Error("Not authenticated. Call dimo_authenticate first.");
   }
 
-  const cacheEntry = authState.vehicleJwts.get(tokenId);
-  const now = Date.now();
-
-  if (
-    cacheEntry &&
-    cacheEntry.expiresAt > now &&
-    privileges.every(p => cacheEntry.privileges.includes(p))
-  ) {
-    return cacheEntry.token;
-  }
-
   // Get new JWT with required privileges
   const vehicleJwt = await authState.dimo.tokenexchange.getVehicleJwt({
     ...authState.developerJwt,
     tokenId: tokenId
-  });
-
-  authState.vehicleJwts.set(tokenId, {
-    token: vehicleJwt,
-    privileges,
-    expiresAt: now + 5 * 60 * 1000 // 5 minutes from now
   });
 
   return vehicleJwt;
@@ -196,7 +179,7 @@ server.tool(
       };
     }
     try {
-      const telemetryJwt = await ensureVehicleJwt(Number(args.variables.tokenId), [1,2,3,4,5]);
+      const telemetryJwt = await ensureVehicleJwt(Number(args.variables.tokenId));
       if (!telemetryJwt.headers || !telemetryJwt.headers.Authorization) {
         return {
           isError: true,
@@ -285,8 +268,7 @@ server.tool(
   "Create a verifiable credential (VC) for a vehicle. Use this tool to generate a Proof of Movement (PoM) or VIN credential for a vehicle, which can be used to prove vehicle activity or identity. Provide the tokenId and type ('pom' or 'vin'). Optionally force creation even if one exists.",
   AttestationCreateSchema.shape,
   async (args: z.infer<typeof AttestationCreateSchema>) => {
-    const requiredPrivilege = args.type === "pom" ? 4 : 5;
-    const attestJwt = await ensureVehicleJwt(args.tokenId, [requiredPrivilege]);
+    const attestJwt = await ensureVehicleJwt(args.tokenId);
     let attestResult;
     if (args.type === "pom") {
       attestResult = await authState.dimo!.attestation.createPomVC({
@@ -365,41 +347,12 @@ server.tool(
 );
 
 server.tool(
-  "get_authentication_token",
-  "Get an authentication token for a specific vehicle. This token can be used to authenticate with the Telemetry API.",
-  GetAuthenticationTokenSchema.shape,
-  async (args: z.infer<typeof GetAuthenticationTokenSchema>) => {
-    try {
-      const token = await ensureVehicleJwt(args.tokenId, args.privileges);
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify(token, null, 2),
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        isError: true,
-        content: [
-          {
-            type: "text",
-            text: `Failed to get authentication token: ${error}`,
-          },
-        ],
-      };
-    }
-  }
-);
-
-server.tool(
   "lock_doors",
   "Lock the doors of a vehicle.",
   VehicleCommandSchema.shape,
   async (args: z.infer<typeof VehicleCommandSchema>) => {
     try {
-      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      const commandJwt = await ensureVehicleJwt(args.tokenId);
       if (!commandJwt.headers || !commandJwt.headers.Authorization) {
         return {
           isError: true,
@@ -455,7 +408,7 @@ server.tool(
   VehicleCommandSchema.shape,
   async (args: z.infer<typeof VehicleCommandSchema>) => {
     try {
-      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      const commandJwt = await ensureVehicleJwt(args.tokenId);
       if (!commandJwt.headers || !commandJwt.headers.Authorization) {
         return {
           isError: true,
@@ -511,7 +464,7 @@ server.tool(
   VehicleCommandSchema.shape,
   async (args: z.infer<typeof VehicleCommandSchema>) => {
     try {
-      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      const commandJwt = await ensureVehicleJwt(args.tokenId);
       if (!commandJwt.headers || !commandJwt.headers.Authorization) {
         return {
           isError: true,
@@ -567,7 +520,7 @@ server.tool(
   VehicleCommandSchema.shape,
   async (args: z.infer<typeof VehicleCommandSchema>) => {
     try {
-      const commandJwt = await ensureVehicleJwt(args.tokenId, [6]);
+      const commandJwt = await ensureVehicleJwt(args.tokenId);
       if (!commandJwt.headers || !commandJwt.headers.Authorization) {
         return {
           isError: true,
