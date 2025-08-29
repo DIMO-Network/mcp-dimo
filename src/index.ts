@@ -26,12 +26,12 @@ interface AuthState {
 
 const IdentityQuerySchema = z.object({
   	query: z.string(),
-		variables: z.record(z.string(), z.string())
+		variables: z.record(z.string(), z.any())
 });
 
 const TelemetryQuerySchema = z.object({
   	query: z.string(),
-		variables: z.record(z.string(), z.string())
+		variables: z.record(z.string(), z.any())
 });
 
 const VinDecodeSchema = z.object({
@@ -179,6 +179,17 @@ server.tool(
       };
     }
     try {
+      if (!args.variables.tokenId) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "tokenId is required in variables for telemetry queries",
+            },
+          ],
+        };
+      }
       const telemetryJwt = await ensureVehicleJwt(Number(args.variables.tokenId));
       if (!telemetryJwt.headers || !telemetryJwt.headers.Authorization) {
         return {
