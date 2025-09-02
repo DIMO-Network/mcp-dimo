@@ -14,7 +14,9 @@ const IdentityQuerySchema = z.object({
 
 const TelemetryQuerySchema = z.object({
   query: z.string(),
-  variables: z.record(z.string(), z.any())
+  variables: z.object({
+    tokenId: z.number()
+  }).and(z.record(z.string(), z.any()))
 });
 
 export function registerVehicleDataTools(server: McpServer, authState: AuthState) {
@@ -101,21 +103,11 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
   // Telemetry API query tool
   server.tool(
     "telemetry_query",
-    "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. **IMPORTANT: You MUST call telemetry_introspect first to understand the schema structure before making any telemetry queries.** This tool fetches telemetry data (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license. Always provide tokenId in variables. Common queries: vehicle status, location history, trip data, charging status.",
+    "Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. **CRITICAL REQUIREMENTS: 1) You MUST call telemetry_introspect first to understand the schema structure, 2) You MUST ALWAYS provide tokenId in the variables object for every telemetry query.** This tool fetches telemetry data (status, location, movement, VIN, attestations) for a specific vehicle. Requires vehicle to be shared with the developer license.",
     TelemetryQuerySchema.shape,
     async (args: z.infer<typeof TelemetryQuerySchema>) => {
       // Validate vehicle operation (auth + ownership)
-      if (!args.variables.tokenId) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text" as const,
-              text: "tokenId is required in variables for telemetry queries",
-            },
-          ],
-        };
-      }
+      // Note: tokenId is now guaranteed by schema validation
       const validationError = await validateVehicleOperation(authState, args.variables.tokenId);
       if (validationError) {
         return validationError;
@@ -134,7 +126,7 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
         };
       }
       try {
-        const jwtResult = await getVehicleJwtWithValidation(authState, Number(args.variables.tokenId), `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`);
+        const jwtResult = await getVehicleJwtWithValidation(authState, args.variables.tokenId, `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`);
         if (jwtResult.error) {
           return jwtResult.error;
         }
