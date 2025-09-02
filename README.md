@@ -1,583 +1,365 @@
 # DIMO MCP Server
 
-An MCP (Model Context Protocol) server that provides seamless access to the DIMO Network APIs, enabling AI assistants to query vehicle data, decode VINs, create verifiable credentials, and interact with the DIMO ecosystem.
+An MCP (Model Context Protocol) server that provides seamless access to the DIMO Network APIs, enabling AI assistants to query vehicle data, execute vehicle commands, decode VINs, create verifiable credentials, and interact with the DIMO ecosystem.
 
 ## Overview
 
 This server acts as a bridge between AI assistants and DIMO's vehicle data network, providing:
 - Direct access to DIMO's GraphQL APIs (Identity and Telemetry)
 - Automatic JWT token management for authenticated endpoints
+- Vehicle ownership validation with fleet mode support
 - VIN decoding and vehicle information lookup
-- Verifiable credential creation (Proof of Movement and VIN credentials)
+- Vehicle command execution (doors, charging)
+- Verifiable credential creation (VIN credentials)
 - Schema introspection for both APIs
+- OAuth authentication flow management
 
-## Features
+## Architecture
 
-### 🆔 Server Identity & Authentication
+The server is built with a modular architecture split across focused tool categories:
 
-#### `developer_license_info`
-**Get current identity and authorization status of this DIMO MCP server instance.**
+- **Server Identity Tools** (`server-identity.ts`) - Authentication, OAuth flows, and vehicle access checking
+- **Vehicle Data Tools** (`vehicle-data.ts`) - GraphQL queries for identity and telemetry APIs with schema introspection
+- **Vehicle Commands Tools** (`vehicle-commands.ts`) - Door lock/unlock and charging start/stop commands
+- **Utilities Tools** (`utilities.ts`) - VIN decoding, vehicle search, and attestation creation
 
-This tool provides essential context about who the MCP server is acting as within the DIMO ecosystem. It tells you your developer license identity, authentication status, and vehicle access summary.
+## Quick Start
 
-**Provides:**
-- **Developer Identity**: Client ID of the developer license you represent
-- **Authentication Status**: OAuth and Developer JWT configuration status  
-- **Vehicle Access Summary**: Total number of vehicles currently sharing data with your license
-- **Vehicle List**: Details of accessible vehicles (first 5 shown)
-- **Authorization Context**: Whether users need to complete OAuth flow for vehicle access
-- **Identity Context**: Clear "who am I" summary for Claude
+### Prerequisites
 
-Use this tool when you need to understand your identity context for DIMO operations.
-
-**Example:**
-```javascript
-{
-  "tool": "developer_license_info",
-  "arguments": {}
-}
-```
-
-**GraphQL Query Used:**
-```graphql
-{
-  vehicles(filterBy: {privileged: "0x106C8EcD7793842DfD31E0D86C31900c1C722f60"} first: 10) {
-    totalCount
-  }
-}
-```
-
-**Sample Response:**
-```json
-{
-  "clientId": "0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7",
-  "isAuthenticated": true,
-  "oauthConfigured": true,
-  "developerJwtConfigured": true,
-  "totalVehiclesWithAccess": 3,
-  "summary": "Acting as developer license 0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7 with access to 3 vehicles",
-  "identity_context": {
-    "who_am_i": "DIMO Developer License 0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7",
-    "authentication_status": "Authenticated",
-    "oauth_status": "User Authorized",
-    "vehicle_access_count": 3
-  }
-}
-```
-
-### 🔍 GraphQL Query Tools
-
-#### `identity_query`
-Query the DIMO Identity GraphQL API for public identity data such as users, devices, and vehicles. No authentication required.
-
-**Example:**
-```graphql
-{
-  vehicles(first: 10) {
-    nodes {
-      id
-      tokenId
-      make
-      model
-      year
-    }
-  }
-}
-```
-
-#### `telemetry_query`
-Query the DIMO Telemetry GraphQL API for real-time or historical vehicle data. Automatically handles authentication with appropriate privileges.
-
-**Parameters:**
-- `query`: GraphQL query string
-- `variables`: Optional query variables
-- `tokenId`: Vehicle token ID (required)
-
-**Example:**
-```graphql
-{
-  vehicle(tokenId: 12345) {
-    signalsLatest {
-      speed {
-        value
-        timestamp
-      }
-      batteryLevel {
-        value
-        timestamp
-      }
-    }
-  }
-}
-```
-
-#### `vin_decode`
-Decode a VIN string to get make, model, year, and other vehicle details.
-
-**Parameters:**
-- `vin`: VIN string to decode (required)
-- `countryCode`: Country code for decoding (optional, default: "USA")
-
-#### `search_vehicles`
-Search for vehicle definitions and information in DIMO. Filter by make, model, year, or free-text query.
-
-**Parameters:**
-- `query`: Free-text search
-- `make`: Filter by make (e.g., "tesla", "ford")
-- `year`: Filter by year
-- `model`: Filter by model
-
-### 🔐 Access & Permissions
-
-#### `check_vehicle_access`
-Check if the developer license has access to vehicles. Verifies OAuth flow completion.
-
-#### `check_vehicle_permissions`
-Get detailed information about what specific permissions (privileges) the developer currently has on vehicles using the SACD system.
-
-**Parameters:**
-- `tokenId`: Optional vehicle token ID to check permissions for
-- `userAddress`: Optional user address to filter by vehicle owner
-
-### 🚗 Vehicle Commands
-
-#### `lock_doors`
-Lock the doors of a vehicle. Requires vehicle access privileges.
-
-#### `unlock_doors`
-Unlock the doors of a vehicle. Requires vehicle access privileges.
-
-#### `start_charge`
-Start charging an electric vehicle. Requires vehicle access privileges.
-
-#### `stop_charge`
-Stop charging an electric vehicle. Requires vehicle access privileges.
-
-### 🔧 Utilities
-
-### 🏆 Verifiable Credentials
-
-#### `attestation_create`
-Create verifiable credentials for vehicles to prove activity or identity.
-
-**Parameters:**
-- `tokenId`: Vehicle token ID
-- `type`: Credential type ("vin" for VIN credential)
-- `force`: Force creation even if one exists (optional, default: false)
-
-### 📋 Schema Introspection
-
-#### `identity_introspect`
-Get the complete GraphQL schema for the Identity API to discover available queries and types.
-
-#### `telemetry_introspect`
-Get the complete GraphQL schema for the Telemetry API to discover available queries and types.
-
-## Prerequisites
-
-- Node.js 16 or higher
+- Node.js 18 or higher (or Bun runtime)
 - DIMO Developer License from [DIMO Developer Console](https://console.dimo.org/)
 - Valid API credentials (client ID, domain, and private key)
 
-## Installation
+### Installation
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd dimo-mcp-server
+# Install via npm
+npm install -g mcp-dimo
 
-# Install dependencies
-npm install
-
-# Build the project (if using TypeScript)
-npm run build
+# Or clone and build locally
+git clone https://github.com/DIMO-Network/mcp-dimo.git
+cd mcp-dimo
+bun install
+bun run build
 ```
 
-## Configuration
+### Configuration
 
-### Environment Variables
+Set up your environment variables:
 
-Create a `.env` file or set the following environment variables:
-
-#### User Authorization (OAuth)
 ```bash
-# Required for user authorization via browser popup
-DIMO_CLIENT_ID=0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7
-DIMO_REDIRECT_URI=https://spoofproof.replit.app
+# Required - DIMO Developer License credentials
+DIMO_CLIENT_ID=your_client_id_here
+DIMO_DOMAIN=your_domain.com  
+DIMO_PRIVATE_KEY=your_private_key_here
 
-# Optional OAuth settings (with defaults)
+# Optional - Fleet mode (skips ownership checks)
+FLEET_MODE=false
+
+# Optional - Custom login URL
 DIMO_LOGIN_BASE_URL=https://login.dimo.org
-DIMO_ENTRY_STATE=LOGOUT
 ```
 
-#### System Authentication (Developer JWT)
-```bash
-# Required for API calls (system-level authentication)
-DIMO_CLIENT_ID=your_client_id
-DIMO_DOMAIN=your_domain.com
-DIMO_PRIVATE_KEY=your_private_key_here
-```
+### MCP Client Setup (Claude Desktop)
 
-#### Full Configuration (Recommended)
-```bash
-# User authorization
-DIMO_CLIENT_ID=0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7
-DIMO_REDIRECT_URI=https://spoofproof.replit.app
+Add to your Claude Desktop configuration:
 
-# System authentication (same CLIENT_ID, different credentials)
-DIMO_DOMAIN=your_domain.com
-DIMO_PRIVATE_KEY=your_private_key_here
-```
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 
-#### Additional Settings
-```bash
-# Additional headers for GraphQL requests (optional)
-HEADERS={"X-Custom-Header": "value"}
-```
-
-### MCP Client Configuration
-
-#### For Claude Desktop
-
-Add to your configuration file:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-**Full Configuration (Recommended):**
 ```json
 {
   "mcpServers": {
     "dimo": {
-      "command": "node",
-      "args": ["/path/to/dimo-mcp-server/index.js"],
+      "command": "mcp-dimo",
       "env": {
-        "DIMO_CLIENT_ID": "0xE40AEc6f45e854b2E0cDa20624732F16AA029Ae7",
-        "DIMO_REDIRECT_URI": "https://spoofproof.replit.app",
+        "DIMO_CLIENT_ID": "your_client_id_here",
         "DIMO_DOMAIN": "your_domain.com",
-        "DIMO_PRIVATE_KEY": "your_private_key"
+        "DIMO_PRIVATE_KEY": "your_private_key_here"
       }
     }
   }
 }
 ```
 
-**Developer JWT Only (No User Authorization):**
-```json
-{
-  "mcpServers": {
-    "dimo": {
-      "command": "node",
-      "args": ["/path/to/dimo-mcp-server/index.js"],
-      "env": {
-        "DIMO_CLIENT_ID": "your_client_id",
-        "DIMO_DOMAIN": "your_domain.com",
-        "DIMO_PRIVATE_KEY": "your_private_key"
-      }
-    }
-  }
-}
-```
+## Available Tools
 
-## Usage Examples
+### 🆔 Server Identity & Authentication
 
-### 1. Query Public Vehicle Data
+#### `check_vehicle_access_status`
+**Check current vehicle access status and authentication state.**
+
+**ALWAYS call this tool first** to understand what vehicles are available before attempting any vehicle operations. Shows which vehicles have granted access to their data.
+
+**Example:**
 ```javascript
-// Use identity_query tool
+// Check what vehicles are accessible
 {
-  "query": "{ vehicles(first: 5) { nodes { tokenId make model year } } }"
+  "tool": "check_vehicle_access_status",
+  "arguments": {}
 }
 ```
 
-### 2. Get Vehicle Telemetry
-```javascript
-// Use telemetry_query tool
-{
-  "tokenId": 12345,
-  "query": "{ vehicle(tokenId: 12345) { signalsLatest { speed { value } } } }"
-}
-```
+#### `init_oauth`
+**Initialize OAuth authentication flow with automatic callback handling.**
 
-### 3. Decode a VIN
-```javascript
-// Use vin_operations tool
-{
-  "operation": "decode",
-  "vin": "1HGCM82633A123456"
-}
-```
+Starts a local server and opens OAuth URL for user authentication.
 
-### 5. Search for Tesla Vehicles
-```javascript
-// Use search_vehicles tool
-{
-  "makeSlug": "tesla",
-  "year": 2023
-}
-```
-
-## Authentication Flow
-
-The DIMO MCP server uses a two-tier authentication system that separates user consent from system API access:
-
-### 1. User Authorization (OAuth)
-
-**Purpose:** Users grant the MCP server permission to access their DIMO account and vehicle data.
-
-**When needed:** Required for accessing user-specific data like vehicle telemetry, sending vehicle commands, or creating attestations.
-
-Users grant access to their DIMO account through OAuth popup authentication:
-
-#### New OAuth Tools
-
-##### `oauth_init`
-Initialize user authorization flow. Returns an OAuth URL for users to grant access to their DIMO account.
+**Parameters:**
+- `port` (optional): Local server port (default: 3333)
 
 **Example:**
 ```javascript
 {
-  "tool": "oauth_init",
-  "arguments": {}
+  "tool": "init_oauth", 
+  "arguments": {"port": 3333}
 }
 ```
 
-##### `oauth_callback`
-Complete user authorization by processing the callback URL after the user grants access.
+#### `generate_vehicle_data_sharing_url`
+**Generate URL for users to share vehicle data with this developer license.**
 
 **Parameters:**
-- `callbackUrl`: The full URL you were redirected to after granting access
+- `permissionTemplateId` (optional): Permission template ID (default: 1)
+
+### 📊 Vehicle Data & Schema
+
+#### `identity_introspect`
+**Introspect the DIMO Identity GraphQL schema.**
+
+**ALWAYS call this tool first** before using `identity_query` to understand available fields and types.
+
+#### `identity_query`
+**Query the DIMO Identity GraphQL API for public data.**
+
+**Prerequisites:** Must call `identity_introspect` first to understand schema structure.
+
+**Parameters:**
+- `query`: GraphQL query string
+- `variables`: Query variables object
 
 **Example:**
 ```javascript
 {
-  "tool": "oauth_callback",
+  "tool": "identity_query",
   "arguments": {
-    "callbackUrl": "https://spoofproof.replit.app?code=AUTH_CODE&state=STATE"
+    "query": "{ vehicle(tokenId: 12345) { owner definition { make model year } } }",
+    "variables": {"tokenId": 12345}
   }
 }
 ```
 
-##### `oauth_status`
-Check current user authorization status, system authentication configuration, and optionally verify access to a specific vehicle.
+#### `telemetry_introspect`
+**Introspect the DIMO Telemetry GraphQL schema.**
+
+**ALWAYS call this tool first** before using `telemetry_query` to understand available fields and types.
+
+#### `telemetry_query`
+**Query vehicle telemetry data (requires authentication and vehicle access).**
+
+**Prerequisites:** 
+- Must call `telemetry_introspect` first to understand schema structure
+- Vehicle must be shared with this developer license
+- User must be authenticated
 
 **Parameters:**
-- `verifyVehicleAccess`: Optional vehicle token ID to verify access to
+- `query`: GraphQL query string
+- `variables`: Query variables object (must include `tokenId`)
 
 **Example:**
 ```javascript
-// Basic status check
 {
-  "tool": "oauth_status",
-  "arguments": {}
-}
-
-// Verify access to specific vehicle
-{
-  "tool": "oauth_status",
+  "tool": "telemetry_query",
   "arguments": {
-    "verifyVehicleAccess": 12345
+    "query": "{ vehicle(tokenId: $tokenId) { signalsLatest { speed { value timestamp } } } }",
+    "variables": {"tokenId": 12345}
   }
 }
 ```
 
-##### `check_vehicle_access`
-Verify developer license access to vehicles by querying the DIMO Identity API with the correct `privileged` filter. This confirms that the OAuth authorization flow has been completed successfully by checking actual API access.
+### 🚗 Vehicle Commands
+
+All vehicle commands require:
+- Vehicle shared with this developer license
+- User authentication
+- Vehicle ownership (unless `FLEET_MODE=true`)
+
+#### `lock_doors`
+**Lock vehicle doors.**
 
 **Parameters:**
-- `tokenId`: Optional specific vehicle token ID to check access for  
-- `userAddress`: Optional user address to filter by vehicle owner
+- `tokenId`: Vehicle token ID
 
-**Examples:**
-```javascript
-// Check access to all vehicles privileged to the developer license
-{
-  "tool": "check_vehicle_access",
-  "arguments": {}
-}
-
-// Check access to a specific vehicle
-{
-  "tool": "check_vehicle_access", 
-  "arguments": {
-    "tokenId": 12345
-  }
-}
-
-// Check access for a specific user's vehicles
-{
-  "tool": "check_vehicle_access",
-  "arguments": {
-    "userAddress": "0x1234567890123456789012345678901234567890"
-  }
-}
-```
-
-**GraphQL Query Used:**
-```graphql
-{
-  vehicles(filterBy: {privileged: "env.DIMO_CLIENT_ID", owner: "userAddress"} first: 10) {
-    totalCount
-    nodes {
-      id
-      tokenId
-      owner
-      make
-      model
-      year
-    }
-  }
-}
-```
-
-##### `check_vehicle_permissions`
-Get detailed information about what specific permissions (privileges) the developer currently has on vehicles using the SACD (Service Access Contract Definition) system. This provides a comprehensive view of granted privileges with human-readable descriptions.
+#### `unlock_doors`
+**Unlock vehicle doors.**
 
 **Parameters:**
-- `tokenId`: Optional specific vehicle token ID to check permissions for
-- `userAddress`: Optional user address to filter by vehicle owner
+- `tokenId`: Vehicle token ID
 
-**Examples:**
+#### `start_charge`
+**Start vehicle charging (electric/hybrid vehicles only).**
+
+**Parameters:**
+- `tokenId`: Vehicle token ID
+
+#### `stop_charge`
+**Stop vehicle charging (electric/hybrid vehicles only).**
+
+**Parameters:**
+- `tokenId`: Vehicle token ID
+
+### 🔧 Utilities
+
+#### `vin_decode`
+**Decode a VIN to get vehicle specifications.**
+
+**Parameters:**
+- `vin`: Vehicle Identification Number
+- `countryCode` (optional): Country code (default: "USA")
+
+**Example:**
 ```javascript
-// Check permissions on all accessible vehicles
 {
-  "tool": "check_vehicle_permissions",
-  "arguments": {}
-}
-
-// Check permissions on a specific vehicle
-{
-  "tool": "check_vehicle_permissions",
+  "tool": "vin_decode",
   "arguments": {
-    "tokenId": 12345
-  }
-}
-
-// Check permissions for a specific user's vehicles
-{
-  "tool": "check_vehicle_permissions",
-  "arguments": {
-    "userAddress": "0x1234567890123456789012345678901234567890"
+    "vin": "1HGCM82633A123456",
+    "countryCode": "USA"
   }
 }
 ```
 
-**Privilege Definitions (from [DIMO SACD Documentation](https://docs.dimo.org/developer-platform/developer-guide/permissions-contract-sacd)):**
-- **Privilege 1**: All-time, non-location data
-- **Privilege 2**: Commands (send commands to vehicle)
-- **Privilege 3**: Current location data
-- **Privilege 4**: All-time location data (historical)
-- **Privilege 5**: View VIN credentials
-- **Privilege 6**: Live data streams
-- **Privilege 7**: Raw data access
-- **Privilege 8**: Approximate location data
+#### `search_vehicles`
+**Search DIMO's vehicle definition database.**
 
-**Sample Response:**
-```json
+**Parameters:**
+- `query` (optional): Free-text search query
+- `make` (optional): Vehicle make
+- `model` (optional): Vehicle model  
+- `year` (optional): Vehicle year
+
+**Example:**
+```javascript
 {
-  "hasAccess": true,
-  "totalCount": 2,
-  "vehicles": [
-    {
-      "tokenId": 12345,
-      "owner": "0x...",
-      "make": "Tesla",
-      "model": "Model 3",
-      "year": 2023,
-      "privileges": {
-        "translated": [
-          {"id": 1, "name": "Non-Location Data", "description": "All-time, non-location data"},
-          {"id": 2, "name": "Commands", "description": "Send commands to the vehicle"},
-          {"id": 3, "name": "Current Location", "description": "View current location data"}
-        ],
-        "count": 3
-      }
-    }
-  ]
+  "tool": "search_vehicles",
+  "arguments": {
+    "make": "tesla",
+    "year": 2023
+  }
 }
 ```
 
-#### OAuth Flow Verification
+#### `attestation_create`
+**Create verifiable credentials for vehicles.**
 
-The server now provides **two-part verification** to ensure OAuth authentication is working correctly:
+**Prerequisites:**
+- Vehicle must be shared with this developer license
+- User must be authenticated
+- Vehicle ownership required (unless `FLEET_MODE=true`)
 
-1. **Token Verification**: Checks if user has completed OAuth flow and has a valid token
-2. **API Access Verification**: Queries the DIMO Identity API to confirm the developer license actually has access to specified vehicles
+**Parameters:**
+- `tokenId`: Vehicle token ID
+- `type`: Credential type ("vin")
+- `force` (optional): Force creation even if exists (default: false)
 
-This addresses the requirement that *"to check if the oauth flow has been completed, requires two things: 1. You can query the dimo identity api to check if there is currently access."*
+## Authentication & Authorization
 
-#### Automatic Authorization Prompts
+### Two-Tier Authentication System
 
-When user OAuth is configured and you use any DIMO tool that requires user access (like `telemetry_query`, `lock_doors`, etc.), the server will:
+#### 1. Developer JWT (System-Level)
+- **Purpose**: Authenticate the MCP server itself with DIMO APIs
+- **Required for**: All API calls, VIN decoding, vehicle search
+- **Configuration**: `DIMO_CLIENT_ID`, `DIMO_DOMAIN`, `DIMO_PRIVATE_KEY`
 
-1. **Check OAuth Token**: Verify user has granted authorization
-2. **Verify Vehicle Access**: Query Identity API to confirm access to the specific vehicle
-3. **Provide Clear Guidance**: Show authorization URL with instructions if access is missing
+#### 2. User OAuth (User-Level)  
+- **Purpose**: Users grant permission to access their specific vehicle data
+- **Required for**: Vehicle telemetry, commands, attestations
+- **Process**: Use `init_oauth` tool to start authentication flow
 
-#### Manual Authorization Flow
+### Fleet Mode
 
-1. Call `oauth_init` to get the authorization URL
-2. Open the returned URL in a browser popup
-3. Complete the DIMO authorization process (user grants access)
-4. Copy the callback URL after redirect  
-5. Call `oauth_callback` with the full callback URL
-6. Use `oauth_status` to verify authorization status
+Set `FLEET_MODE=true` to skip vehicle ownership checks, allowing operation on any vehicle shared with the developer license.
 
-### 2. System Authentication (Developer JWT)
+```bash
+# Enable fleet mode (skip ownership validation)
+FLEET_MODE=true
 
-**Purpose:** Authenticates the MCP server itself to make API calls to DIMO services.
+# Disable fleet mode (enforce ownership validation) 
+FLEET_MODE=false  # or omit the variable
+```
 
-**When needed:** Required for all API operations. The server uses these credentials after users have granted OAuth authorization.
+## Environment Variables
 
-The MCP server uses Developer JWT for making API calls on behalf of authorized users:
+### Required
+```bash
+DIMO_CLIENT_ID=your_client_id_here          # Your DIMO developer license client ID
+```
 
-1. **Developer JWT**: System-level credentials configured via environment variables
-2. **API Calls**: All DIMO API requests use the Developer JWT for authentication
-3. **Vehicle JWT Management**: When accessing vehicle-specific data, the server:
-   - Uses Developer JWT to request vehicle-specific tokens
-   - Caches tokens with appropriate privileges
-   - Automatically refreshes expired tokens
+### Optional
+```bash
+DIMO_DOMAIN=your_domain.com                 # Required for Developer JWT
+DIMO_PRIVATE_KEY=your_private_key_here      # Required for Developer JWT
+FLEET_MODE=false                            # Skip ownership checks when true
+DIMO_LOGIN_BASE_URL=https://login.dimo.org  # Custom login URL
+DIMO_ENTRY_STATE=LOGIN                      # OAuth entry state
+```
 
-### Privilege Requirements
+## Usage Workflow
 
-Different operations require specific privileges:
-- **Privilege 1**: Basic telemetry data
-- **Privilege 2**: Extended telemetry data
-- **Privilege 3**: Location data
-- **Privilege 4**: Proof of Movement creation
-- **Privilege 5**: VIN access and VIN credential creation
+### Recommended Tool Call Sequence
 
-## API Endpoints
+1. **`check_vehicle_access_status`** - See what vehicles are available
+2. **`identity_introspect`** / **`telemetry_introspect`** - Understand schema structure  
+3. **`init_oauth`** (if needed) - Authenticate user for vehicle access
+4. **`identity_query`** / **`telemetry_query`** - Query with proper schema knowledge
+5. **Vehicle commands/operations** - Execute actions on known vehicles
 
-The server connects to the following DIMO APIs:
-- **Identity API**: `https://identity-api.dimo.zone/query` (Public)
-- **Telemetry API**: `https://telemetry-api.dimo.zone/query` (Authenticated)
+### Example: Complete Vehicle Data Query
+
+```javascript
+// 1. Check available vehicles
+{"tool": "check_vehicle_access_status", "arguments": {}}
+
+// 2. Understand telemetry schema
+{"tool": "telemetry_introspect", "arguments": {}}
+
+// 3. Authenticate user (if needed)
+{"tool": "init_oauth", "arguments": {}}
+
+// 4. Query vehicle data
+{
+  "tool": "telemetry_query",
+  "arguments": {
+    "query": "{ vehicle(tokenId: $tokenId) { signalsLatest { speed { value } location { latitude longitude } } } }",
+    "variables": {"tokenId": 12345}
+  }
+}
+```
 
 ## Error Handling
 
-The server provides detailed error messages for common issues:
-- Invalid GraphQL queries
-- Authentication failures
-- Missing privileges
-- Network errors
-- Invalid parameters
+The server provides intelligent error detection and guidance:
 
-## Logging
+### Schema Errors
+When GraphQL queries fail due to unknown fields, the server detects this and provides specific guidance:
 
-The server uses structured JSON logging to stderr for better debugging:
-```json
-{
-  "level": "info",
-  "event": "dimo_auth_success",
-  "message": "DIMO developer authentication successful"
-}
+```
+GraphQL schema error detected. Please call telemetry_introspect first to understand the schema structure, then fix your query.
 ```
 
-## Security Considerations
+### Authentication Errors
+Clear messages guide users through the authentication process:
 
-- Store API credentials securely using environment variables
-- Never commit credentials to version control
-- Use `.env` files for local development only
-- Rotate API keys regularly
-- Limit token privileges to what's necessary
+```
+You are not logged in, please login and share a vehicle with me.
+```
+
+### Ownership Errors
+Fleet mode and ownership validation provide appropriate access control:
+
+```
+You are not the owner of this vehicle, sorry.
+```
 
 ## Development
 
@@ -585,74 +367,130 @@ The server uses structured JSON logging to stderr for better debugging:
 
 ```
 src/
-├── index.ts                  # Main MCP server entry point
+├── index.ts                     # Main MCP server entry point
 ├── helpers/
-│   ├── developer-jwt.ts      # Developer JWT authentication functions
-│   ├── oauth.ts              # OAuth authentication functions  
-│   ├── queries.ts            # GraphQL queries for DIMO APIs
-│   ├── introspection.ts      # GraphQL schema introspection
-│   ├── headers.ts            # Header parsing utilities
-│   └── package.ts            # Package version utilities
+│   ├── developer-jwt.ts         # JWT authentication functions
+│   ├── identity-queries.ts      # Identity API query functions
+│   ├── oauth.ts                 # OAuth flow management
+│   ├── introspection.ts         # GraphQL schema introspection
+│   └── package.ts               # Package version utilities
 ├── shared/
-│   ├── types.ts              # Shared TypeScript interfaces
-│   ├── config.ts             # Environment configuration
-│   ├── auth-helpers.ts       # Authentication helper functions
-│   ├── vehicle-queries.ts    # Vehicle data querying functions
-│   └── privileges.ts         # SACD privilege definitions
+│   ├── types.ts                 # Shared TypeScript interfaces
+│   ├── config.ts                # Environment configuration
+│   └── command-helpers.ts       # Shared validation utilities
 ├── tools/
-│   ├── server-identity.ts    # Server identity tool, OAuth, and access tools
-│   ├── vehicle-data.ts       # Vehicle data querying tools  
-│   ├── vehicle-commands.ts   # Vehicle command tools
-│   └── utilities.ts          # Utility tools (VIN decode, search, etc.)
+│   ├── server-identity.ts       # Identity, OAuth, and access tools
+│   ├── vehicle-data.ts          # GraphQL query tools
+│   ├── vehicle-commands.ts      # Vehicle command tools
+│   └── utilities.ts             # VIN decode, search, attestation tools
 └── types/
-    └── dimo-sdk.d.ts         # DIMO SDK type definitions
+    └── dimo-sdk.d.ts            # DIMO SDK type definitions
 ```
 
 ### Development Commands
 
 ```bash
-# Run in development mode
-npm run dev
-
-# Run tests  
-npm test
+# Development mode with hot reload
+bun run dev
 
 # Build for production
-npm run build
+bun run build
+
+# Start built server
+bun run start
 ```
+
+### Adding New Tools
+
+1. Create tool in appropriate module (`tools/`)
+2. Use shared validation helpers from `command-helpers.ts`
+3. Follow consistent return format:
+   ```typescript
+   return {
+     content: [{
+       type: "text" as const,
+       text: JSON.stringify(data, null, 2)
+     }]
+   };
+   ```
+
+## Security Features
+
+- **Input Validation**: All inputs validated using Zod schemas
+- **Authentication Required**: Protected endpoints require proper authentication
+- **Ownership Validation**: Vehicle operations validate ownership (unless fleet mode)
+- **JWT Token Management**: Automatic token refresh and validation
+- **Error Sanitization**: Safe error messages without sensitive data exposure
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Authentication Failed**
-   - Verify your credentials are correct
-   - Ensure your developer license is active
-   - Check that your domain matches the one configured in DIMO Console
+**1. Authentication Failed**
+```
+Error: Developer JWT not configured
+```
+**Solution**: Ensure `DIMO_DOMAIN` and `DIMO_PRIVATE_KEY` are set correctly.
 
-2. **GraphQL Query Errors**
-   - Use the introspection tools to verify schema
-   - Check that required fields are included
-   - Validate query syntax
+**2. Vehicle Access Denied**
+```
+Error: You are not the owner of this vehicle
+```
+**Solution**: Either enable `FLEET_MODE=true` or ensure the authenticated user owns the vehicle.
 
-3. **Permission Denied**
-   - Ensure the vehicle owner has granted necessary privileges
-   - Check that your developer license has access to the vehicle
+**3. Schema Errors**
+```
+GraphQL schema error detected
+```
+**Solution**: Call the appropriate introspection tool (`identity_introspect` or `telemetry_introspect`) first.
 
-## Resources
+**4. No Vehicle Access**
+```
+You haven't shared any vehicles with me yet
+```
+**Solution**: Use `init_oauth` to authenticate and share vehicles through the DIMO app.
 
-- [DIMO Developer Documentation](https://docs.dimo.org/developer-platform)
-- [DIMO Developer Console](https://console.dimo.org/)
-- [DIMO GraphQL Playground - Identity](https://identity-api.dimo.zone/)
-- [DIMO GraphQL Playground - Telemetry](https://telemetry-api.dimo.zone/)
-- [MCP Protocol Documentation](https://modelcontextprotocol.io/)
+### Debug Logging
 
-## Support
+The server provides structured JSON logging for debugging:
 
-For issues and questions:
-- DIMO Discord: [https://discord.gg/dimo](https://discord.gg/dimo)
-- GitHub Issues: [Create an issue](https://github.com/DIMO-Network/data-sdk/issues)
+```json
+{
+  "level": "info",
+  "event": "dimo_dev_jwt_success", 
+  "message": "Developer JWT configured successfully"
+}
+```
+
+## API Reference
+
+### Vehicle Data APIs
+
+- **Identity API**: `https://identity-api.dimo.zone/query` - Public vehicle and device information
+- **Telemetry API**: `https://telemetry-api.dimo.zone/query` - Real-time and historical vehicle data
+- **Devices API**: `https://devices-api.dimo.zone` - Vehicle command execution
+
+### Supported Vehicle Commands
+
+- **Door Control**: Lock/unlock doors on compatible vehicles
+- **Charging Control**: Start/stop charging on electric/hybrid vehicles
+- **Future**: Additional commands as supported by DIMO network
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes following the existing patterns
+4. Test your changes
+5. Submit a pull request
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Links
+
+- [DIMO Network](https://dimo.org/)
+- [DIMO Developer Console](https://console.dimo.org/)
+- [DIMO Documentation](https://docs.dimo.org/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)

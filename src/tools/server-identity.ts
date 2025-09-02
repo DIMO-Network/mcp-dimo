@@ -1,9 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
-import { 
-  generateLoginUrl, 
-  parseOAuthCallback, 
-  createDimoToken,
+import {
   generateVehicleDataSharingUrl,
   VehicleDataSharingConfigSchema,
   initOAuthServer,
@@ -23,7 +20,7 @@ const VehicleDataSharingUrlSchema = z.object({
 });
 
 export function registerServerIdentityTools(server: McpServer, authState: AuthState) {
-  
+
   // Prompt: About this vehicle data agent
   server.prompt(
     "Vehicle Genius",
@@ -118,21 +115,21 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
       };
     }
   );
-  
+
   // Tool: Vehicle Access Status
   server.tool(
-    "check_vehicle_access_status", 
-    "Check the current status of vehicles sharing data with this developer license. This tool shows which vehicles have granted access to their data, including the total count of vehicles sharing data with your developer license and, if you're authenticated, how many of your own vehicles are sharing data. Use this tool to understand your current vehicle data access permissions and see what vehicles you can query or control.",
+    "check_vehicle_access_status",
+    "Check the current status of vehicles sharing data with this developer license. **ALWAYS call this tool first** to understand what vehicles are available before attempting any vehicle operations. This tool shows which vehicles have granted access to their data, including the total count of vehicles sharing data with your developer license and, if you're authenticated, how many of your own vehicles are sharing data. Use this tool to understand your current vehicle data access permissions and see what vehicles you can query or control.",
     DeveloperLicenseInfoSchema.shape,
     async (args: z.infer<typeof DeveloperLicenseInfoSchema>) => {
       try {
         const config = getEnvConfig();
-        
+
         const vehicleInfo = await vehiclesSharedWithAgent(config.clientId);
         let yourVehicleInfo;
-        if(authState.userOAuthToken && authState.userOAuthToken.address) {
+        if (authState.userOAuthToken && authState.userOAuthToken.address) {
           yourVehicleInfo = await currentUserVehiclesSharedWithAgent(
-            config.clientId, 
+            config.clientId,
             authState.userOAuthToken.address
           );
         }
@@ -145,16 +142,78 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
           vehicles: yourVehicleInfo?.vehicles
         };
 
-        // Return different messages based on user login status
-        if (!authState.userOAuthToken) {
+        // Return different messages based on fleet mode and user login status
+        if (config.FLEET_MODE) {
+          // Fleet mode enabled - provide guidance for finding vehicles via Identity API
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                ...licenseInfo,
+                summary: `Fleet mode enabled - Acting as developer license ${config.clientId} with access to ${vehicleInfo.totalVehiclesWithAccess || 0} vehicles`,
+                fleetMode: true,
+                message: `Fleet mode is enabled, which allows access to any vehicle shared with this developer license without ownership validation. To find specific vehicles to work with:
+
+1. **Call identity_introspect** to understand the schema structure
+2. **Use identity_query** to search for vehicles with proper GraphQL syntax:
+
+**Query vehicles shared with this developer license:**
+\`\`\`graphql
+{
+  vehicles(first: 100 filterBy: {privileged: $clientId} ) {
+    nodes {
+      tokenId
+      tokenDID
+      name
+      mintedAt
+      manufacturer {
+        name
+      }
+      definition {
+        make
+        model
+        year
+      }
+    }
+  }
+}
+\`\`\`
+
+**Variables:**
+\`\`\`json
+{"clientId": "${config.clientId}"}
+\`\`\`
+
+**Query specific vehicle by tokenId:**
+\`\`\`graphql
+{
+  vehicle(tokenId: $tokenId) {
+    tokenId
+    owner
+    definition {
+      make
+      model
+      year
+    }
+  }
+}
+\`\`\`
+
+You can then use any tokenId found in the results for telemetry queries or vehicle commands.`,
+                availableVehicles: vehicleInfo.totalVehiclesWithAccess || 0,
+                userAuthenticated: !!authState.userOAuthToken
+              }, null, 2)
+            }]
+          };
+        } else if (!authState.userOAuthToken) {
           // User is not logged in
           return {
             content: [{
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify({
                 ...licenseInfo,
                 summary: `Acting as developer license ${config.clientId} with access to ${vehicleInfo.totalVehiclesWithAccess || 0} vehicles`,
-                message: "I can access vehicle data that has been shared with this developer license, but you haven't authenticated yet, so i dont know who you are. Would you like to authenticate to share one of your vehicles with me? Use the oauth_init tool to start the authentication process."
+                message: "I can access vehicle data that has been shared with this developer license, but you haven't authenticated yet, so i dont know who you are. Would you like to authenticate to share one of your vehicles with me? Use the init_oauth tool to start the authentication process."
               }, null, 2)
             }]
           };
@@ -162,16 +221,16 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
           // User is logged in
           return {
             content: [{
-              type: "text",
+              type: "text" as const,
               text: JSON.stringify({
                 ...licenseInfo,
                 summary: `Acting as developer license ${config.clientId} with access to ${vehicleInfo.totalVehiclesWithAccess || 0} vehicles`,
-                message: authState.userOAuthToken.address ? 
+                message: authState.userOAuthToken.address ?
                   (yourVehicleInfo && yourVehicleInfo.totalVehiclesWithAccess === 0
                     ? `You are authenticated (wallet: ${authState.userOAuthToken.address}) but haven't shared any vehicles with me yet. You can share vehicles through the DIMO app to grant me access to your vehicle data.`
                     : `You are authenticated (wallet: ${authState.userOAuthToken.address}) and have shared ${yourVehicleInfo?.totalVehiclesWithAccess || 0} vehicle(s) with me. I can access data from ${vehicleInfo.totalVehiclesWithAccess || 0} total vehicles through this developer license.`
-                  ) : 
-                  "You are authenticated but I couldn't determine your wallet address. Please try re-authenticating with oauth_init."
+                  ) :
+                  "You are authenticated but I couldn't determine your wallet address. Please try re-authenticating with init_oauth."
               }, null, 2)
             }]
           };
@@ -180,7 +239,7 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
         return {
           isError: true,
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Failed to get developer license information: ${error instanceof Error ? error.message : String(error)}`
           }]
         };
@@ -195,12 +254,12 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
     async (args: z.infer<typeof LocalOAuthServerSchema>) => {
       const { port } = args;
       const config = getEnvConfig();
-      
+
       // Callback to handle successful token reception
       const onTokenReceived = (token: StoredOAuthToken) => {
         authState.userOAuthToken = token;
       };
-      
+
       return initOAuthServer(port, config, onTokenReceived);
     }
   );
@@ -215,10 +274,10 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
         const config = getEnvConfig();
         const parsedConfig = VehicleDataSharingConfigSchema.parse(config);
         const sharingUrl = generateVehicleDataSharingUrl(parsedConfig, args.permissionTemplateId?.toString());
-        
+
         return {
           content: [{
-            type: "text",
+            type: "text" as const,
             text: JSON.stringify({
               url: sharingUrl,
               instructions: "Share this URL with users who want to grant access to their vehicle data. After visiting this URL and authenticating, their vehicles will be accessible through this developer license.",
@@ -229,12 +288,12 @@ Ready to help you optimize and manage your vehicle fleet with data-driven insigh
         return {
           isError: true,
           content: [{
-            type: "text",
+            type: "text" as const,
             text: `Failed to generate vehicle data sharing URL: ${error instanceof Error ? error.message : String(error)}`
           }]
         };
       }
     }
   );
-  
+
 }

@@ -1,9 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
 import type { AuthState } from '../shared/types.js';
-import { getEnvConfig } from "../shared/config.js";
-import { ensureVehicleJwt } from "../shared/auth-helpers.js";
-import { checkVehicleOwnership } from "../helpers/identity-queries.js";
+import { validateVehicleOperation, getVehicleJwtWithValidation } from '../shared/command-helpers.js';
 
 // Schemas
 const VinDecodeSchema = z.object({
@@ -34,7 +32,13 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
     async (args: z.infer<typeof VinDecodeSchema>) => {
       // Use developer JWT for API calls
       if (!authState.developerJwt) {
-        throw new Error("Developer JWT not configured. Please provide developer JWT credentials.");
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: "Developer JWT not configured. Please set DIMO_DOMAIN and DIMO_PRIVATE_KEY environment variables. Current configuration is missing required credentials for API access."
+          }]
+        };
       }
 
       const decoded = await authState.dimo!.devicedefinitions.decodeVin({
@@ -44,7 +48,7 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
       });
       return {
         content: [{
-          type: "text",
+          type: "text" as const,
           text: JSON.stringify(decoded, null, 2)
         }]
       };
@@ -54,7 +58,7 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
   // Vehicle search tool
   server.tool(
     "search_vehicles",
-    "Search for vehicle definitions and information in DIMO. Use this tool to look up supported makes, models, and years, or to find vehicles matching a query. You can filter by make, model, year, or a free-text query.",
+    "Search for vehicle definitions and information in DIMO. Use this tool to look up supported makes, models, and years, or to find vehicles matching a query. You can filter by make, model, year, or a free-text query. This searches the general vehicle database, not user-specific vehicles. For user vehicles, use check_vehicle_access_status.",
     SearchVehiclesSchema.shape,
     async (args: z.infer<typeof SearchVehiclesSchema>) => {
       if (!authState.dimo) {
@@ -68,7 +72,7 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
       const searchResults = await authState.dimo.devicedefinitions.search(searchParams);
       return {
         content: [{
-          type: "text",
+          type: "text" as const,
           text: JSON.stringify(searchResults, null, 2)
         }]
       };
@@ -78,56 +82,31 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
   // Attestation creation tool
   server.tool(
     "attestation_create",
-    "Create a verifiable credential (VC) for a vehicle. Use this tool to generate a VIN credential for a vehicle, which can be used to prove vehicle activity or identity. Provide the tokenId and type ('vin'). Optionally force creation even if one exists.",
+    "Create a verifiable credential (VC) for a vehicle. **Prerequisites:** Vehicle must be shared with this developer license and user must be authenticated. Call check_vehicle_access_status first to see available vehicles. Use this tool to generate a VIN credential for a vehicle, which can be used to prove vehicle activity or identity. Provide the tokenId and type ('vin'). Optionally force creation even if one exists.",
     AttestationCreateSchema.shape,
     async (args: z.infer<typeof AttestationCreateSchema>) => {
-      const config = getEnvConfig();
-      if (!authState.userOAuthToken) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: "You are not logged in, please login.",
-            },
-          ],
-        };
+      // Validate vehicle operation (auth + ownership)
+      const validationError = await validateVehicleOperation(authState, args.tokenId);
+      if (validationError) {
+        return validationError;
       }
-      const ownership = await checkVehicleOwnership(authState.userOAuthToken?.address, args.tokenId);
-      if (!config.FLEET_MODE && !ownership.isOwner) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: "You are not the owner of this vehicle, sorry.",
-            },
-          ],
-        };
-      }
-      const telemetryJwt = await ensureVehicleJwt(authState, Number(args.tokenId));
-      if (!telemetryJwt.headers || !telemetryJwt.headers.Authorization) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`,
-            },
-          ],
-        };
+
+      // Get vehicle JWT
+      const jwtResult = await getVehicleJwtWithValidation(authState, args.tokenId, `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`);
+      if (jwtResult.error) {
+        return jwtResult.error;
       }
 
       let attestResult;
 
       attestResult = await authState.dimo!.attestation.createVinVC({
-        ...telemetryJwt,
+        ...jwtResult.jwt,
         tokenId: args.tokenId,
         force: args.force
       });
       return {
         content: [{
-          type: "text",
+          type: "text" as const,
           text: JSON.stringify(attestResult, null, 2)
         }]
       };
