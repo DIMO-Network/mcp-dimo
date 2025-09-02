@@ -81,7 +81,7 @@ Ready to be your personal guide to the world of connected vehicle data!`
             role: "assistant",
             content: {
               type: "text",
-              text: `I am Vehicle Genius, your fleet management assistant, powered by Claude and connected to the DIMO network to help you efficiently manage and monitor your entire vehicle fleet.
+              text: `I am Fleet Genius, your fleet management assistant, connected to the DIMO network to help you efficiently manage and monitor your entire vehicle fleet.
 
 ## What I am:
 - Your dedicated AI assistant specialized in fleet management, monitoring, and optimization
