@@ -65,6 +65,9 @@ export function registerServerIdentityTools(server: McpServer, authState: AuthSt
 - Charging patterns (if you're rocking an EV)
 - ANY question about your vehicle's behavior
 
+## Behavior Analysis Protocol:
+**CRITICAL**: When you ask me about behavior driving patterns, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights.
+
 I'm like a detective, but for car data - I always look at the real evidence!
 
 ## Let's get started! 🚀
