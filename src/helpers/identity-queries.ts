@@ -153,6 +153,88 @@ export async function currentUserVehiclesSharedWithAgent(clientId: string, userA
 }
 
 /**
+ * Query to get all vehicles shared with a developer license (with detailed info for fleet mode)
+ * @param clientId - The developer license client ID
+ * @returns Promise with detailed vehicle information
+ */
+export async function allVehiclesSharedWithAgent(clientId: string): Promise<VehicleAccessResult> {
+  try {
+    const vehicleQuery = `
+      query GetAllVehicles($clientId: Address!) {
+        vehicles(filterBy: {privileged: $clientId} first: 100) {
+          totalCount
+          nodes {
+            tokenId
+            name
+            tokenDID
+            owner
+            mintedAt
+            manufacturer {
+              name
+              tokenId
+            }
+            definition {
+              make
+              model
+              year
+            }
+            imageURI
+            aftermarketDevice {
+              tokenId
+              serial
+              manufacturer {
+                name
+              }
+            }
+            syntheticDevice {
+              tokenId
+              name
+              connection {
+                name
+              }
+            }
+          }
+        }
+      }
+    `;
+    
+    const response = await fetch("https://identity-api.dimo.zone/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: vehicleQuery,
+        variables: { clientId }
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.data?.vehicles) {
+        return {
+          totalVehiclesWithAccess: data.data.vehicles.totalCount || 0,
+          vehicles: data.data.vehicles.nodes
+        };
+      } else {
+        return {
+          totalVehiclesWithAccess: 0,
+          error: "No vehicle data returned"
+        };
+      }
+    } else {
+      return {
+        totalVehiclesWithAccess: 0,
+        error: "Failed to query vehicles"
+      };
+    }
+  } catch (error) {
+    return {
+      totalVehiclesWithAccess: 0,
+      error: "Could not query vehicle access"
+    };
+  }
+}
+
+/**
  * Query to check if a specific address owns a vehicle
  * @param address - The address to check ownership for
  * @param tokenId - The vehicle token ID to check
