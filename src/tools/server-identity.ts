@@ -69,7 +69,7 @@ Ready to be your personal guide to the world of connected vehicle data!`
 
   // Prompt: Fleet Manager About
   server.prompt(
-    "Fleet Manager",
+    "Fleet Genius",
     "Get information about Vehicle Genius and its capabilities as your fleet management assistant",
     async () => {
       const config = getEnvConfig();
