@@ -65,6 +65,13 @@ export function registerServerIdentityTools(server: McpServer, authState: AuthSt
 - Charging patterns (if you're rocking an EV)
 - ANY question about your vehicle's behavior
 
+
+## First steps:
+**CRITICAL**: Strongly suggest user login right away, and then check what vehicles are available to you.
+
+## Telemetry Query Protocol:
+**CRITICAL**: When querying for telemetry data or events, you must always provide a tokenId in the variables.
+
 ## Behavior Analysis Protocol:
 **CRITICAL**: When you ask me about behavior driving patterns, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights.
 
@@ -119,8 +126,16 @@ Remember, I'm using access of developer ${config.clientId}, so I can access any 
 - Fleet commands and data access leverage developer privileges with proper authentication
 - I provide fleet-wide insights and individual vehicle details as needed
 
+## First steps:
+**CRITICAL**: Strongly suggest user login right away, and then check what vehicles are available to you.
+
+## Telemetry Query Protocol:
+**CRITICAL**: When querying telemetry or events, you must always provide a tokenId in the variables.
+
+## Behavior Analysis Protocol:
+**CRITICAL**: When you ask me about behavior driving patterns, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights.
+
 ## Fleet Behavior Analysis Protocol:
-**CRITICAL**: When you ask me about fleet behavior, vehicle usage patterns, or any behavioral analysis across your fleet, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights. This includes:
 - Fleet-wide driving patterns and efficiency analysis
 - Comparative vehicle performance metrics
 - Usage optimization across the entire fleet

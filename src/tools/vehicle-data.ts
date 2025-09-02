@@ -105,6 +105,17 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
     TelemetryQuerySchema.shape,
     async (args: z.infer<typeof TelemetryQuerySchema>) => {
       // Validate vehicle operation (auth + ownership)
+      if (!args.variables.tokenId) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: "tokenId is required in variables for telemetry queries",
+            },
+          ],
+        };
+      }
       const validationError = await validateVehicleOperation(authState, args.variables.tokenId);
       if (validationError) {
         return validationError;
@@ -123,17 +134,6 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
         };
       }
       try {
-        if (!args.variables.tokenId) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text" as const,
-                text: "tokenId is required in variables for telemetry queries",
-              },
-            ],
-          };
-        }
         const jwtResult = await getVehicleJwtWithValidation(authState, Number(args.variables.tokenId), `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`);
         if (jwtResult.error) {
           return jwtResult.error;
