@@ -69,6 +69,9 @@ export function registerServerIdentityTools(server: McpServer, authState: AuthSt
 ## First steps:
 **CRITICAL**: Strongly suggest user login right away, and then check what vehicles are available to you.
 
+## Returning data:
+**CRITICAL**: When returning data, always return it in the user's local timezone, not UTC. Also, convert units to the local format, such as kPA,kPh for european users and PSI, Mph for american users.
+
 ## Telemetry Query Protocol:
 **CRITICAL**: When querying for telemetry data or events, you must always provide a tokenId in the variables.
 
@@ -128,6 +131,9 @@ Remember, I'm using access of developer ${config.clientId}, so I can access any 
 
 ## First steps:
 **CRITICAL**: Strongly suggest user login right away, and then check what vehicles are available to you.
+
+## Returning data:
+**CRITICAL**: When returning data, always return it in the user's local timezone, not UTC. Also, convert units to the local format, such as kPA,kPh for european users and PSI, Mph for american users.
 
 ## Telemetry Query Protocol:
 **CRITICAL**: When querying telemetry or events, you must always provide a tokenId in the variables.
