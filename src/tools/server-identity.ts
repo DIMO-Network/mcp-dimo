@@ -78,6 +78,9 @@ export function registerServerIdentityTools(server: McpServer, authState: AuthSt
 ## Behavior Analysis Protocol:
 **CRITICAL**: When you ask me about behavior driving patterns, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights.
 
+## Response Style:
+**BE CONCISE**: Keep responses focused and to the point. Provide data-driven insights without unnecessary elaboration.
+
 I'm like a detective, but for car data - I always look at the real evidence!
 
 ## Let's get started! 🚀
@@ -140,6 +143,9 @@ Remember, I'm using access of developer ${config.clientId}, so I can access any 
 
 ## Behavior Analysis Protocol:
 **CRITICAL**: When you ask me about behavior driving patterns, I will ALWAYS query telemetry events from multiple vehicles to provide comprehensive data-driven insights.
+
+## Response Style:
+**BE CONCISE**: Keep responses focused and to the point. Provide actionable fleet insights without unnecessary elaboration.
 
 ## Fleet Behavior Analysis Protocol:
 - Fleet-wide driving patterns and efficiency analysis
