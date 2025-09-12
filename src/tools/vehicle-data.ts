@@ -19,6 +19,12 @@ const TelemetryQuerySchema = z.object({
   }).and(z.record(z.string(), z.any()))
 });
 
+const BatchTelemetryQuerySchema = z.object({
+  query: z.string(),
+  tokenIds: z.array(z.number()).min(1, "At least one tokenId is required"),
+  variables: z.record(z.string(), z.any()).optional().default({})
+});
+
 export function registerVehicleDataTools(server: McpServer, authState: AuthState) {
 
   // Identity API query tool
@@ -186,6 +192,166 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
         };
       } catch (error) {
         throw new Error(`Failed to execute GraphQL query: ${error}`);
+      }
+    }
+  );
+
+  // Batch Telemetry API query tool
+  server.tool(
+    "batch_telemetry_query",
+    "Query multiple vehicles in parallel with the same GraphQL query. **CRITICAL REQUIREMENTS: 1) You MUST call telemetry_introspect first to understand the schema structure, 2) All specified vehicles must be shared with the developer license.** This tool executes the same query against multiple tokenIds simultaneously and returns combined results. Useful for fleet operations or comparing data across multiple vehicles.",
+    BatchTelemetryQuerySchema.shape,
+    async (args: z.infer<typeof BatchTelemetryQuerySchema>) => {
+      try {
+        const parsedQuery = parse(args.query!);
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Invalid GraphQL query: ${error}`,
+            },
+          ],
+        };
+      }
+
+      // Validate all vehicles upfront
+      const validationPromises = args.tokenIds.map(tokenId => 
+        validateVehicleOperation(authState, tokenId)
+      );
+      const validationResults = await Promise.all(validationPromises);
+      
+      // Check for validation errors
+      const validationErrors: { tokenId: number; error: any }[] = [];
+      validationResults.forEach((result, index) => {
+        if (result) {
+          validationErrors.push({ tokenId: args.tokenIds[index], error: result });
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Validation failed for ${validationErrors.length} vehicle(s): ${JSON.stringify(validationErrors, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      try {
+        // Get JWTs for all vehicles in parallel
+        const jwtPromises = args.tokenIds.map(tokenId =>
+          getVehicleJwtWithValidation(authState, tokenId, `GraphQL request failed for tokenId ${tokenId} due to missing Authorization header.`)
+        );
+        const jwtResults = await Promise.all(jwtPromises);
+
+        // Check for JWT errors
+        const jwtErrors: { tokenId: number; error: any }[] = [];
+        jwtResults.forEach((result, index) => {
+          if (result.error) {
+            jwtErrors.push({ tokenId: args.tokenIds[index], error: result.error });
+          }
+        });
+
+        if (jwtErrors.length > 0) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `JWT retrieval failed for ${jwtErrors.length} vehicle(s): ${JSON.stringify(jwtErrors, null, 2)}`,
+              },
+            ],
+          };
+        }
+
+        // Execute queries in parallel
+        const queryPromises = args.tokenIds.map(async (tokenId, index) => {
+          const jwtResult = jwtResults[index];
+          const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `${jwtResult.jwt.headers?.Authorization}`,
+          };
+
+          // Merge tokenId into variables
+          const variables = { ...args.variables, tokenId };
+
+          const response = await fetch(TELEMETRY_URL, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              query: args.query,
+              variables,
+            }),
+          });
+
+          if (!response.ok) {
+            const responseText = await response.text();
+            throw new Error(`Request failed for tokenId ${tokenId}: ${response.statusText}\n${responseText}`);
+          }
+
+          const data = await response.json();
+          return { tokenId, data, success: true };
+        });
+
+        const results = await Promise.allSettled(queryPromises);
+        
+        // Process results
+        const successfulResults: Array<{ tokenId: number; data: any }> = [];
+        const failedResults: Array<{ tokenId: number; error: string }> = [];
+
+        results.forEach((result, index) => {
+          const tokenId = args.tokenIds[index];
+          if (result.status === 'fulfilled') {
+            const { data } = result.value;
+            if (data.errors && data.errors.length > 0) {
+              // Check if errors suggest schema issues
+              const hasSchemaError = data.errors.some((error: any) => 
+                error.message?.includes('Cannot query field') || 
+                error.message?.includes('Unknown field') ||
+                error.message?.includes('Unknown type') ||
+                error.message?.includes('Field') && error.message?.includes('doesn\'t exist')
+              );
+              
+              failedResults.push({
+                tokenId,
+                error: hasSchemaError 
+                  ? `GraphQL schema error for tokenId ${tokenId}. Please call telemetry_introspect first to understand the schema structure.`
+                  : `GraphQL errors for tokenId ${tokenId}: ${JSON.stringify(data.errors, null, 2)}`
+              });
+            } else {
+              successfulResults.push({ tokenId, data });
+            }
+          } else {
+            failedResults.push({ tokenId, error: result.reason?.message || 'Unknown error' });
+          }
+        });
+
+        const combinedResult = {
+          summary: {
+            total: args.tokenIds.length,
+            successful: successfulResults.length,
+            failed: failedResults.length
+          },
+          results: successfulResults,
+          ...(failedResults.length > 0 && { errors: failedResults })
+        };
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(combinedResult, null, 2),
+            },
+          ],
+        };
+
+      } catch (error) {
+        throw new Error(`Failed to execute batch GraphQL queries: ${error}`);
       }
     }
   );
