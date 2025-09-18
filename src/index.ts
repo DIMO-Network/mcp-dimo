@@ -14,6 +14,7 @@ import { registerServerIdentityTools } from './tools/server-identity.js';
 import { registerVehicleDataTools } from './tools/vehicle-data.js';
 import { registerVehicleCommandTools } from './tools/vehicle-commands.js';
 import { registerUtilityTools } from './tools/utilities.js';
+import { registerAttestationTools } from './tools/attestations.js';
 
 // Initialize auth state
 const authState: AuthState = {
@@ -91,6 +92,7 @@ async function main() {
   registerVehicleDataTools(server, authState);  
   registerVehicleCommandTools(server, authState);
   registerUtilityTools(server, authState);
+  registerAttestationTools(server, authState);
   
   const transport = new StdioServerTransport();
   await server.connect(transport);

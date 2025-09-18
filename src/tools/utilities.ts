@@ -1,18 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from 'zod';
 import type { AuthState } from '../shared/types.js';
-import { validateVehicleOperation, getVehicleJwtWithValidation } from '../shared/command-helpers.js';
 
 // Schemas
 const VinDecodeSchema = z.object({
   vin: z.string(),
   countryCode: z.string().default("USA")
-});
-
-const AttestationCreateSchema = z.object({
-  tokenId: z.number(),
-  type: z.enum(["vin"]),
-  force: z.boolean().default(false)
 });
 
 const SearchVehiclesSchema = z.object({
@@ -74,40 +67,6 @@ export function registerUtilityTools(server: McpServer, authState: AuthState) {
         content: [{
           type: "text" as const,
           text: JSON.stringify(searchResults, null, 2)
-        }]
-      };
-    }
-  );
-
-  // Attestation creation tool
-  server.tool(
-    "attestation_create",
-    "Create a verifiable credential (VC) for a vehicle. **Prerequisites:** Vehicle must be shared with this developer license and user must be authenticated. Call check_vehicle_access_status first to see available vehicles. Use this tool to generate a VIN credential for a vehicle, which can be used to prove vehicle activity or identity. Provide the tokenId and type ('vin'). Optionally force creation even if one exists.",
-    AttestationCreateSchema.shape,
-    async (args: z.infer<typeof AttestationCreateSchema>) => {
-      // Validate vehicle operation (auth + ownership)
-      const validationError = await validateVehicleOperation(authState, args.tokenId);
-      if (validationError) {
-        return validationError;
-      }
-
-      // Get vehicle JWT
-      const jwtResult = await getVehicleJwtWithValidation(authState, args.tokenId, `GraphQL request failed due to a missing Authorization header. Ensure the vehicle is shared with the developer license and has the required privileges.`);
-      if (jwtResult.error) {
-        return jwtResult.error;
-      }
-
-      let attestResult;
-
-      attestResult = await authState.dimo!.attestation.createVinVC({
-        ...jwtResult.jwt,
-        tokenId: args.tokenId,
-        force: args.force
-      });
-      return {
-        content: [{
-          type: "text" as const,
-          text: JSON.stringify(attestResult, null, 2)
         }]
       };
     }
