@@ -11,6 +11,7 @@ This server acts as a bridge between AI assistants and DIMO's vehicle data netwo
 - VIN decoding and vehicle information lookup
 - Vehicle command execution (doors, charging)
 - Verifiable credential creation (VIN credentials)
+- Vehicle NFT minting using DIMO transactions SDK
 - Schema introspection for both APIs
 - OAuth authentication flow management
 
@@ -21,6 +22,7 @@ The server is built with a modular architecture split across focused tool catego
 - **Server Identity Tools** (`server-identity.ts`) - Authentication, OAuth flows, and vehicle access checking
 - **Vehicle Data Tools** (`vehicle-data.ts`) - GraphQL queries for identity and telemetry APIs with schema introspection
 - **Vehicle Commands Tools** (`vehicle-commands.ts`) - Door lock/unlock and charging start/stop commands
+- **Vehicle Minting Tools** (`vehicle-minting.ts`) - Vehicle NFT minting using DIMO transactions SDK
 - **Utilities Tools** (`utilities.ts`) - VIN decoding, vehicle search, and attestation creation
 
 ## Quick Start
@@ -262,6 +264,77 @@ All vehicle commands require:
 - `type`: Credential type ("vin")
 - `force` (optional): Force creation even if exists (default: false)
 
+### 🚀 Vehicle Minting
+
+#### `initialize_kernel_signer`
+**Initialize the DIMO KernelSigner for vehicle minting transactions.**
+
+Sets up the blockchain signer with passkey authentication for minting vehicle NFTs.
+
+**Parameters:**
+- `rpcUrl`: RPC URL for the blockchain network
+- `bundlerUrl`: Bundler URL for transaction bundling
+- `paymasterUrl`: Paymaster URL for gasless transactions
+- `environment`: Environment ('dev' or 'prod', default: 'dev')
+- `subOrganizationId`: Sub-organization ID for the signer
+- `walletAddress`: Wallet address for the signer
+- `rpId`: Relying Party ID for passkey authentication
+
+**Example:**
+```javascript
+{
+  "tool": "initialize_kernel_signer",
+  "arguments": {
+    "rpcUrl": "https://polygon-rpc.com",
+    "bundlerUrl": "https://bundler.example.com",
+    "paymasterUrl": "https://paymaster.example.com",
+    "environment": "prod",
+    "subOrganizationId": "org_123",
+    "walletAddress": "0x1234...",
+    "rpId": "dimo.org"
+  }
+}
+```
+
+#### `mint_vehicle`
+**Mint a new vehicle NFT using the DIMO transactions SDK.**
+
+**Prerequisites:**
+- KernelSigner must be initialized via `initialize_kernel_signer`
+
+**Parameters:**
+- `make`: Vehicle make (e.g., 'Toyota', 'Ford')
+- `model`: Vehicle model (e.g., 'Camry', 'F-150')
+- `year`: Vehicle year (e.g., 2023)
+- `vin` (optional): Vehicle VIN (will be decoded if provided)
+- `deviceDefinition` (optional): Device definition object
+
+**Example:**
+```javascript
+{
+  "tool": "mint_vehicle",
+  "arguments": {
+    "make": "Tesla",
+    "model": "Model 3",
+    "year": 2023,
+    "vin": "5YJ3E1EA4KF123456"
+  }
+}
+```
+
+#### `get_minting_status`
+**Check the status of the KernelSigner and minting capabilities.**
+
+Returns information about whether the signer is initialized and ready for vehicle minting.
+
+**Example:**
+```javascript
+{
+  "tool": "get_minting_status",
+  "arguments": {}
+}
+```
+
 ## Authentication & Authorization
 
 ### Two-Tier Authentication System
@@ -302,6 +375,11 @@ DIMO_PRIVATE_KEY=your_private_key_here      # Required for Developer JWT
 FLEET_MODE=false                            # Skip ownership checks when true
 DIMO_LOGIN_BASE_URL=https://login.dimo.org  # Custom login URL
 DIMO_ENTRY_STATE=LOGIN                      # OAuth entry state
+
+# Vehicle Minting (Transactions SDK)
+DIMO_RPC_URL=https://polygon-rpc.com        # Blockchain RPC URL
+DIMO_BUNDLER_URL=https://bundler.example.com # Transaction bundler URL
+DIMO_PAYMASTER_URL=https://paymaster.example.com # Paymaster URL for gasless transactions
 ```
 
 ## Usage Workflow
@@ -371,6 +449,7 @@ src/
 ├── helpers/
 │   ├── developer-jwt.ts         # JWT authentication functions
 │   ├── identity-queries.ts      # Identity API query functions
+│   ├── kernel-signer.ts         # KernelSigner initialization helper
 │   ├── oauth.ts                 # OAuth flow management
 │   ├── introspection.ts         # GraphQL schema introspection
 │   └── package.ts               # Package version utilities
@@ -382,6 +461,7 @@ src/
 │   ├── server-identity.ts       # Identity, OAuth, and access tools
 │   ├── vehicle-data.ts          # GraphQL query tools
 │   ├── vehicle-commands.ts      # Vehicle command tools
+│   ├── vehicle-minting.ts       # Vehicle NFT minting tools
 │   └── utilities.ts             # VIN decode, search, attestation tools
 └── types/
     └── dimo-sdk.d.ts            # DIMO SDK type definitions

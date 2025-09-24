@@ -8,6 +8,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AuthState } from './shared/types.js';
 import { getEnvConfig } from './shared/config.js';
 import { getDeveloperJWT } from './helpers/developer-jwt.js';
+import { initializeKernelSignerFromEnv } from './helpers/kernel-signer.js';
 
 // Tool modules
 import { registerServerIdentityTools } from './tools/server-identity.js';
@@ -15,6 +16,7 @@ import { registerVehicleDataTools } from './tools/vehicle-data.js';
 import { registerVehicleCommandTools } from './tools/vehicle-commands.js';
 import { registerUtilityTools } from './tools/utilities.js';
 import { registerAttestationTools } from './tools/attestations.js';
+import { registerVehicleMintingTools } from './tools/vehicle-minting.js';
 
 // Initialize auth state
 const authState: AuthState = {
@@ -70,6 +72,9 @@ async function main() {
     }));
   }
 
+  // Auto-initialize KernelSigner if transaction credentials are available
+  await initializeKernelSignerFromEnv(authState, config);
+
   // Log authentication status
   const hasDevJwt = !!authState.developerJwt;
   
@@ -93,6 +98,7 @@ async function main() {
   registerVehicleCommandTools(server, authState);
   registerUtilityTools(server, authState);
   registerAttestationTools(server, authState);
+  registerVehicleMintingTools(server, authState);
   
   const transport = new StdioServerTransport();
   await server.connect(transport);

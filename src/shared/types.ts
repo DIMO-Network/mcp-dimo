@@ -1,6 +1,6 @@
 import { DIMO } from '@dimo-network/data-sdk';
-import { StoredOAuthToken } from '../helpers/oauth.js';
-import { DeveloperJWT } from '../helpers/developer-jwt.js';
+import type { StoredOAuthToken } from '../helpers/oauth.js';
+import type { DeveloperJWT } from '../helpers/developer-jwt.js';
 
 export interface VehicleJwtCacheEntry {
   token: any;
@@ -13,6 +13,7 @@ export interface AuthState {
   developerJwt?: DeveloperJWT;
   userOAuthToken?: StoredOAuthToken; // User's OAuth token for authorization
   vehicleJwts: Map<number, VehicleJwtCacheEntry>;
+  kernelSigner?: any; // DIMO transactions SDK KernelSigner instance
 }
 
 export interface PrivilegeDefinition {
@@ -27,6 +28,23 @@ export interface ServerIdentityInfo {
   isUserLoggedIn: boolean;
   totalOfYourVehiclesWithAccess?: number;
   vehicles?: any[];
+}
+
+// Transaction-related types
+export interface VehicleMintParams {
+  make: string;
+  model: string;
+  year: number;
+  deviceDefinition?: string;
+  vin?: string;
+}
+
+export interface KernelSignerConfig {
+  rpcUrl: string;
+  bundlerUrl: string;
+  paymasterUrl: string;
+  privateKey: string;
+  environment: 'prod';
 }
 
 // API URLs

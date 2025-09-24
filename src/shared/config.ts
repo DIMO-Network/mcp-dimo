@@ -1,6 +1,6 @@
 // Helper function to get environment variables
 export function getEnvConfig() {
-  const env = process.env;
+  const env = process.env as Record<string, string | undefined>;
   
   // Check for required environment variables
   if (!env.DIMO_CLIENT_ID) {
@@ -13,6 +13,11 @@ export function getEnvConfig() {
     entryState: env.DIMO_ENTRY_STATE || 'LOGIN',
     domain: env.DIMO_DOMAIN,
     privateKey: env.DIMO_PRIVATE_KEY,
-    FLEET_MODE: env.FLEET_MODE === 'true'
+    FLEET_MODE: env.FLEET_MODE === 'true',
+    // Transaction-related configuration
+    rpcUrl: env.DIMO_RPC_URL,
+    bundlerUrl: env.DIMO_BUNDLER_URL,
+    paymasterUrl: env.DIMO_PAYMASTER_URL,
+    mintingWalletPrivateKey: env.DIMO_MINTER_PRIVATE_KEY,
   };
 }

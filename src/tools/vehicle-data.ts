@@ -25,6 +25,14 @@ const BatchTelemetryQuerySchema = z.object({
   variables: z.record(z.string(), z.any()).optional().default({})
 });
 
+const DataSummarySchema = z.object({
+  tokenId: z.number().describe("Vehicle token ID to get data summary for")
+});
+
+const BatchDataSummarySchema = z.object({
+  tokenIds: z.array(z.number()).min(1, "At least one tokenId is required").describe("Array of vehicle token IDs to get data summaries for")
+});
+
 export function registerVehicleDataTools(server: McpServer, authState: AuthState) {
 
   // Identity API query tool
@@ -274,7 +282,7 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
           const jwtResult = jwtResults[index];
           const headers = {
             "Content-Type": "application/json",
-            "Authorization": `${jwtResult.jwt.headers?.Authorization}`,
+            "Authorization": `${jwtResult.jwt!.headers?.Authorization}`,
           };
 
           // Merge tokenId into variables
@@ -387,6 +395,249 @@ export function registerVehicleDataTools(server: McpServer, authState: AuthState
           },
         ],
       };
+    }
+  );
+
+  // Vehicle data summary tool
+  server.tool(
+    "vehicle_data_summary",
+    "Get a comprehensive data summary for a vehicle including signal counts, availability, and time ranges. This provides an overview of what telemetry data is available for a specific vehicle token ID. **Prerequisites:** Vehicle JWT required for access.",
+    DataSummarySchema.shape,
+    async (args: z.infer<typeof DataSummarySchema>) => {
+      // Validate vehicle access
+      const validationResult = await validateVehicleOperation(authState, args.tokenId);
+      if (validationResult) {
+        return validationResult;
+      }
+
+      // Get vehicle JWT
+      const jwtResult = await getVehicleJwtWithValidation(authState, args.tokenId);
+      if (jwtResult.error) {
+        return jwtResult.error;
+      }
+
+      const query = `
+            query GetDataSummary($tokenId: Int!) {
+              dataSummary(tokenId: $tokenId) {
+                numberOfSignals
+                availableSignals
+                firstSeen
+                lastSeen
+                signalDataSummary {
+                  name
+                  numberOfSignals
+                  firstSeen
+                  lastSeen
+                }
+              }
+            }`;
+
+      const variables = {
+        tokenId: args.tokenId
+      };
+
+      try {
+        const headers = {
+          "Content-Type": "application/json",
+          "Authorization": `${jwtResult.jwt!.headers?.Authorization}`,
+        };
+
+        const response = await fetch(TELEMETRY_URL, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            query,
+            variables
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.errors && data.errors.length > 0) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `GraphQL errors in data summary query: ${JSON.stringify(data, null, 2)}`,
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(data, null, 2),
+            },
+          ],
+        };
+
+      } catch (error) {
+        throw new Error(`Failed to get vehicle data summary: ${error}`);
+      }
+    }
+  );
+
+  // Batch vehicle data summary tool
+  server.tool(
+    "batch_vehicle_data_summary",
+    "Get comprehensive data summaries for multiple vehicles including signal counts, availability, and time ranges. This provides an overview of what telemetry data is available for multiple vehicle token IDs in a single request. **Prerequisites:** Vehicle JWTs required for access to each vehicle.",
+    BatchDataSummarySchema.shape,
+    async (args: z.infer<typeof BatchDataSummarySchema>) => {
+      // Check for validation errors in parallel
+      const validationPromises = args.tokenIds.map(tokenId =>
+        validateVehicleOperation(authState, tokenId)
+      );
+      const validationResults = await Promise.all(validationPromises);
+
+      // Check for validation errors
+      const validationErrors: { tokenId: number; error: any }[] = [];
+      validationResults.forEach((result, index) => {
+        if (result) {
+          validationErrors.push({ tokenId: args.tokenIds[index], error: result });
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text" as const,
+              text: `Access validation failed for ${validationErrors.length} vehicle(s): ${JSON.stringify(validationErrors, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      try {
+        // Get JWTs for all vehicles in parallel
+        const jwtPromises = args.tokenIds.map(tokenId =>
+          getVehicleJwtWithValidation(authState, tokenId, `Data summary request failed for tokenId ${tokenId} due to missing Authorization header.`)
+        );
+        const jwtResults = await Promise.all(jwtPromises);
+
+        // Check for JWT errors
+        const jwtErrors: { tokenId: number; error: any }[] = [];
+        jwtResults.forEach((result, index) => {
+          if (result.error) {
+            jwtErrors.push({ tokenId: args.tokenIds[index], error: result.error });
+          }
+        });
+
+        if (jwtErrors.length > 0) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: `JWT retrieval failed for ${jwtErrors.length} vehicle(s): ${JSON.stringify(jwtErrors, null, 2)}`,
+              },
+            ],
+          };
+        }
+
+        // Execute data summary queries in parallel
+        const queryPromises = args.tokenIds.map(async (tokenId, index) => {
+          const jwtResult = jwtResults[index];
+          const headers = {
+            "Content-Type": "application/json",
+            "Authorization": `${jwtResult.jwt!.headers?.Authorization}`,
+          };
+
+          const query = `
+query GetDataSummary($tokenId: Int!) {
+  dataSummary(tokenId: $tokenId) {
+    numberOfSignals
+    availableSignals
+    firstSeen
+    lastSeen
+    signalDataSummary {
+      name
+      numberOfSignals
+      firstSeen
+      lastSeen
+    }
+  }
+}`;
+
+          const variables = { tokenId };
+
+          const response = await fetch(TELEMETRY_URL, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              query,
+              variables,
+            }),
+          });
+
+          if (!response.ok) {
+            const responseText = await response.text();
+            throw new Error(`Request failed for tokenId ${tokenId}: ${response.statusText}\n${responseText}`);
+          }
+
+          const data = await response.json();
+          return { tokenId, data, success: true };
+        });
+
+        const results = await Promise.allSettled(queryPromises);
+        
+        // Process results
+        const successfulResults: Array<{ tokenId: number; data: any }> = [];
+        const failedResults: Array<{ tokenId: number; error: string }> = [];
+
+        results.forEach((result, index) => {
+          const tokenId = args.tokenIds[index];
+          if (result.status === 'fulfilled') {
+            const { data } = result.value;
+            if (data.errors && data.errors.length > 0) {
+              // Check if errors suggest schema issues
+              const hasSchemaError = data.errors.some((error: any) => 
+                error.message?.includes('Cannot query field') || 
+                error.message?.includes('Unknown field') ||
+                error.message?.includes('Unknown type') ||
+                error.message?.includes('Field') && error.message?.includes('doesn\'t exist')
+              );
+              
+              failedResults.push({
+                tokenId,
+                error: hasSchemaError 
+                  ? `GraphQL schema error for tokenId ${tokenId}. Please call telemetry_introspect first to understand the schema structure.`
+                  : `GraphQL errors for tokenId ${tokenId}: ${JSON.stringify(data.errors, null, 2)}`
+              });
+            } else {
+              successfulResults.push({ tokenId, data: data.data });
+            }
+          } else {
+            failedResults.push({ tokenId, error: result.reason?.message || 'Unknown error' });
+          }
+        });
+
+        const combinedResult = {
+          summary: {
+            total: args.tokenIds.length,
+            successful: successfulResults.length,
+            failed: failedResults.length
+          },
+          results: successfulResults,
+          ...(failedResults.length > 0 && { errors: failedResults })
+        };
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(combinedResult, null, 2),
+            },
+          ],
+        };
+
+      } catch (error) {
+        throw new Error(`Failed to execute batch data summary queries: ${error}`);
+      }
     }
   );
 }

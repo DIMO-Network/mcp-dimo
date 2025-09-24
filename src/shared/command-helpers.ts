@@ -1,7 +1,7 @@
 import type { AuthState } from './types.js';
 import { getEnvConfig } from './config.js';
 import { checkVehicleOwnership } from '../helpers/identity-queries.js';
-import { ensureVehicleJwt } from '../helpers/developer-jwt.js';
+import { ensureVehicleJwt, getDeveloperJWT } from '../helpers/developer-jwt.js';
 
 /**
  * Common validation pattern for vehicle operations
@@ -46,6 +46,11 @@ export async function getVehicleJwtWithValidation(authState: AuthState, tokenId:
   try {
     // Check developer JWT first
     if (!authState.developerJwt) {
+      authState.developerJwt = await getDeveloperJWT(authState.dimo!, {
+        clientId: getEnvConfig().clientId,
+        domain: getEnvConfig().domain!,
+        privateKey: getEnvConfig().privateKey!
+      });
       return {
         error: {
           isError: true,
